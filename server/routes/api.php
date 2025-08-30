@@ -6,6 +6,7 @@ use App\Http\Controllers\admin\StudentController;
 use App\Http\Controllers\admin\SubjectController;
 use App\Http\Controllers\admin\TeacherController;
 use App\Http\Controllers\studentauthController;
+use App\Http\Controllers\teacher\QuizController;
 use App\Http\Controllers\TeacherAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -79,6 +80,14 @@ Route::get('stlogout', [studentauthController::class, 'logout']);
 
 //Teacher Group
 Route::get('telogout', [studentauthController::class, 'logout']);
+
+//teacher quiz routes
+Route::post('quizzes', [QuizController::class, 'store']);
+     Route::get('quizzes', [QuizController::class, 'index']);
+     Route::put('quizzes/{id}', [QuizController::class, 'update']);
+Route::delete('quizzes/{id}', [QuizController::class, 'destroy']);
+Route::get('quizzes/{id}', [QuizController::class, 'show']);
+
 
 
 });
