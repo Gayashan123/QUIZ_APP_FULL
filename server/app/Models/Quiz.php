@@ -19,7 +19,7 @@ class Quiz extends Model
         'passing_score',
         'start_time',
         'end_time',
-        'end_date',
+
     ];
 
     public function subject()

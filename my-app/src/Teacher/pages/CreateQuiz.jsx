@@ -37,7 +37,27 @@ import { AuthContext } from "../../context/Auth";
 
 const steps = ["Quiz Details", "Add Questions", "Review & Publish"];
 
-/* ------------------------- Utilities for fallback teacher_id ------------------------- */
+/* ------------------------- Date helpers (local, safe) ------------------------- */
+function parseLocalDateTime(value) {
+  if (!value) return null;
+  const d = new Date(value); // datetime-local string -> local Date
+  return isNaN(d.getTime()) ? null : d;
+}
+function pad2(n) {
+  return n.toString().padStart(2, "0");
+}
+function toLocalSqlDateTime(date) {
+  // YYYY-MM-DD HH:mm:ss in local time
+  const y = date.getFullYear();
+  const m = pad2(date.getMonth() + 1);
+  const d = pad2(date.getDate());
+  const h = pad2(date.getHours());
+  const min = pad2(date.getMinutes());
+  const s = pad2(date.getSeconds());
+  return `${y}-${m}-${d} ${h}:${min}:${s}`;
+}
+
+/* ------------------------- Utilities for teacher_id resolution ------------------------- */
 function isLikelyJWT(t) {
   return typeof t === "string" && t.split(".").length === 3;
 }
@@ -87,6 +107,29 @@ function extractTeacherIdFromObject(obj) {
   return null;
 }
 
+/* ------------------------- API error helper (detailed) ------------------------- */
+async function throwApiError(res, fallbackMsg) {
+  let msg = fallbackMsg;
+  try {
+    const data = await res.json();
+    msg = data.message || data.error || fallbackMsg;
+    if (data.errors && typeof data.errors === "object") {
+      const flat = Object.entries(data.errors)
+        .flatMap(([field, arr]) =>
+          Array.isArray(arr) ? arr.map((m) => `${field}: ${m}`) : [`${field}: ${arr}`]
+        )
+        .join("; ");
+      if (flat) msg = `${msg} — ${flat}`;
+    }
+  } catch {
+    try {
+      const text = await res.text();
+      if (text) msg = `${fallbackMsg} — ${text}`;
+    } catch {}
+  }
+  throw new Error(msg);
+}
+
 /* --------------------------------- Component --------------------------------- */
 export default function CreateQuiz() {
   const navigate = useNavigate();
@@ -113,7 +156,7 @@ export default function CreateQuiz() {
     severity: "success",
   });
 
-  // Always use latest token (from context first, then LS as fallback)
+  // Use latest token (context first, then LS)
   const authToken = user?.token || tokenFromLS() || "";
   const headers = useMemo(
     () => ({
@@ -134,7 +177,7 @@ export default function CreateQuiz() {
     const fetchSubjects = async () => {
       try {
         const res = await fetch(`${apiurl}subjects`, { method: "GET", headers });
-        if (!res.ok) throw new Error("Failed to fetch subjects");
+        if (!res.ok) await throwApiError(res, "Failed to fetch subjects");
         const data = await res.json();
         setSubjects(Array.isArray(data) ? data : data.data || []);
       } catch (err) {
@@ -158,12 +201,15 @@ export default function CreateQuiz() {
     if (!Number.isFinite(ps) || ps < 0 || ps > 100)
       errors.push("Passing score must be between 0 and 100");
 
-    if (!quiz.start_time) errors.push("Start time is required");
-    if (!quiz.end_time) errors.push("End time is required");
-    if (quiz.start_time && quiz.end_time) {
-      const start = new Date(quiz.start_time).toISOString().slice(0, 19).replace('T', ' ');;
-      const end = new Date(quiz.end_time).toISOString().slice(0, 19).replace('T', ' ');;
-      if (!(start < end)) errors.push("End time must be after start time");
+    const startDate = parseLocalDateTime(quiz.start_time);
+    const endDate = parseLocalDateTime(quiz.end_time);
+    if (!startDate) errors.push("Start time is required");
+    if (!endDate) errors.push("End time is required");
+
+    if (startDate && endDate) {
+      if (!(startDate.getTime() < endDate.getTime())) {
+        errors.push("End time must be after start time");
+      }
     }
 
     return errors.length ? errors[0] : null;
@@ -228,8 +274,7 @@ export default function CreateQuiz() {
     } catch {}
 
     // Try JWT
-    const tkn = authToken;
-    const payload = decodeJwtPayload(tkn);
+    const payload = decodeJwtPayload(authToken);
     if (payload) {
       const id =
         parseIdCandidate(payload.teacher_id) ||
@@ -240,17 +285,14 @@ export default function CreateQuiz() {
         parseIdCandidate(payload?.user?.teacher_id) ||
         parseIdCandidate(payload?.user?.id);
       if (id) {
-        // Update in memory/localStorage for future
+        // Update persisted user for future requests
         const raw = localStorage.getItem("userInfo");
         if (raw) {
           try {
             const obj = JSON.parse(raw);
             const nextObj = { ...obj, teacher_id: id };
             localStorage.setItem("userInfo", JSON.stringify(nextObj));
-            if (user) {
-              // keep token and other fields; update context
-              login({ ...user, teacher_id: id });
-            }
+            if (user) login({ ...user, teacher_id: id });
           } catch {}
         }
         return id;
@@ -266,7 +308,6 @@ export default function CreateQuiz() {
           extractTeacherIdFromObject(data) ||
           extractTeacherIdFromObject(data?.data);
         if (id) {
-          // persist
           const raw = localStorage.getItem("userInfo");
           if (raw) {
             try {
@@ -286,6 +327,82 @@ export default function CreateQuiz() {
     return null;
   };
 
+  // Helper: extract ID from various API response shapes
+  const pickId = (obj) =>
+    obj?.id ||
+    obj?.data?.id ||
+    obj?.quiz?.id ||
+    obj?.question?.id ||
+    obj?.option?.id ||
+    obj?.result?.id ||
+    null;
+
+  // Create quiz, then questions, then options (cascade)
+  // Uses flat endpoints: POST /api/questions and POST /api/options
+  const createQuizCascade = async (quizPayload, questions) => {
+    // 1) Create Quiz
+    const resQuiz = await fetch(`${apiurl}quizzes`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(quizPayload),
+    });
+    if (!resQuiz.ok) {
+      await throwApiError(resQuiz, "Failed to create quiz");
+    }
+    const quizJson = await resQuiz.json();
+    const quizId = pickId(quizJson);
+    if (!quizId) throw new Error("Quiz created but ID not returned by API");
+
+    // 2) Create each question (flat endpoint)
+    for (const q of questions) {
+      const qPayload = {
+        quiz_id: Number(quizId),
+        question_text: q.text.trim(),
+        points: Number(q.points),
+        explanation: q.explanation?.trim() || null,
+        image_url: q.imageUrl || null, // adjust/remove if backend doesn't use images
+      };
+
+      const resQuestion = await fetch(`${apiurl}questions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(qPayload),
+      });
+      if (!resQuestion.ok) {
+        await throwApiError(
+          resQuestion,
+          `Failed to create question: "${q.text.slice(0, 40)}..."`
+        );
+      }
+      const qJson = await resQuestion.json();
+      const questionId = pickId(qJson);
+      if (!questionId) throw new Error("Question created but ID not returned by API");
+
+      // 3) Create options for the question (flat endpoint)
+      for (let idx = 0; idx < q.options.length; idx++) {
+        const optPayload = {
+          question_id: Number(questionId),
+          option_text: q.options[idx].trim(),
+          // If your API expects true/false, change to: is_correct: idx === q.correctAnswer
+          is_correct: idx === q.correctAnswer ? 1 : 0,
+        };
+        const resOpt = await fetch(`${apiurl}options`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(optPayload),
+        });
+        if (!resOpt.ok) {
+          await throwApiError(
+            resOpt,
+            `Failed to create option "${optPayload.option_text}"`
+          );
+        }
+      }
+    }
+
+    return quizId;
+  };
+
   const submitQuiz = async () => {
     const detailsErr = validateQuizDetails();
     if (detailsErr) return showSnackbar(detailsErr, "error");
@@ -294,7 +411,6 @@ export default function CreateQuiz() {
     if (qErr) return showSnackbar(qErr, "error");
 
     const teacher_id = await resolveTeacherId();
-    console.log("Resolved teacher_id:", teacher_id); // <-- Add here to debug
     if (!teacher_id) {
       showSnackbar(
         "Could not determine your teacher ID. Please re-login or contact support.",
@@ -303,62 +419,43 @@ export default function CreateQuiz() {
       return;
     }
 
-    const payload = {
+    // Format date-times safely in local SQL format
+    const startDate = parseLocalDateTime(quiz.start_time);
+    const endDate = parseLocalDateTime(quiz.end_time);
+    if (!startDate || !endDate) {
+      showSnackbar("Invalid date/time values", "error");
+      return;
+    }
+
+    // Base quiz payload WITHOUT nested questions (cascade creation instead)
+    // Includes both common and original keys to maximize backend compatibility
+    const startSql = toLocalSqlDateTime(startDate);
+    const endSql = toLocalSqlDateTime(endDate);
+    const quizPayload = {
       teacher_id: Number(teacher_id),
+      // titles/password variants
+      title: quiz.quiz_title.trim(),
       quiz_title: quiz.quiz_title.trim(),
-      subject_id: Number(quiz.subject_id),
+      password: quiz.quiz_password?.trim() || null,
       quiz_password: quiz.quiz_password?.trim() || null,
+      subject_id: Number(quiz.subject_id),
       time_limit: Number(quiz.time_limit),
       passing_score: Number(quiz.passing_score),
-      
-      // Convert to ISO if backend expects ISO:
-      start_time: new Date(quiz.start_time).toISOString(),
-      end_time: new Date(quiz.end_time).toISOString(),
-       
-      questions: quiz.questions.map((q) => ({
-        question_text: q.text.trim(),
-        points: Number(q.points),
-        explanation: q.explanation?.trim() || null,
-        image: q.imageUrl || null,
-        options: q.options.map((opt, idx) => ({
-          option_text: opt.trim(),
-          is_correct: idx === q.correctAnswer,
-        })),
-      })),
+      // datetime variants
+      start_at: startSql,
+      end_at: endSql,
+      start_time: startSql,
+      end_time: endSql,
     };
 
     try {
-    try {
-  setIsSubmitting(true);
-
-  const response = await fetch(`${apiurl}quizzes`, {
-    method: "POST",
-    headers,  // headers with token
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    let errorMsg = "Failed to create quiz";
-    try {
-      const errorData = await response.json();
-      errorMsg = errorData.message || errorMsg;
-    } catch {}
-    throw new Error(errorMsg);
-  }
-
-  const data = await response.json();
-  console.log("Quiz created:", data);
-  setIsSubmitting(false);
-} catch (error) {
-  console.error("Error creating quiz:", error.message);
-  setIsSubmitting(false);
-}
-
-
-      showSnackbar("Quiz published successfully!", "success");
+      setIsSubmitting(true);
+      await createQuizCascade(quizPayload, quiz.questions);
+      showSnackbar("Quiz and questions published successfully!", "success");
       setTimeout(() => navigate("/home"), 800);
     } catch (error) {
-      showSnackbar(error.message || "Failed to create quiz. Please try again.", "error");
+      console.error(error);
+      showSnackbar(error.message || "Failed to create quiz/questions. Please try again.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -448,8 +545,6 @@ export default function CreateQuiz() {
           </Grid>
         </Grid>
 
-        
-
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <TextField
@@ -463,12 +558,6 @@ export default function CreateQuiz() {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-
-          
-
-     
-
-
           <Grid item xs={12} md={6}>
             <TextField
               label="End Time"
@@ -505,6 +594,7 @@ export default function CreateQuiz() {
 
     useEffect(() => {
       if (tabValue === 1 && editIndex !== null) {
+        // switching to PDF upload mode cancels editing
         resetCurrentQuestion();
       }
     }, [tabValue]); // eslint-disable-line
