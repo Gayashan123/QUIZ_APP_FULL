@@ -40,7 +40,14 @@ class QuestionController extends Controller
             ], 400);
         }
 
-        $question = Question::create($validator->validated());
+
+        $question=[];
+
+
+        foreach ($request->all() as $data) {
+        $question[] = Question::create($data);
+    }
+
 
         return response()->json([
             'status' => true,
