@@ -23,7 +23,7 @@ export default function Sidebar({ teacherName }) {
     try {
       const token = localStorage.getItem("authToken");
       if (token) {
-        await fetch("http://127.0.0.1:8000/api/logout", {
+        await fetch("http://127.0.0.1:8000/api/telogout", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
