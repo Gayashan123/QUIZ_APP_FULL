@@ -26,33 +26,29 @@ class OptionController extends Controller
      * Store a new option
      */
     public function store(Request $request)
-{
-    // Validate that the request is an array of options
-    $validator = Validator::make($request->all(), [
-        '*.question_id' => 'required|exists:questions,id',
-        '*.option_text' => 'required|string',
-        '*.is_correct'  => 'sometimes|boolean'
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
 
-    if ($validator->fails()) {
+            'question_id' => 'required|exists:questions,id',
+            'option_text' => 'required|string',
+            'is_correct' => 'sometimes|boolean'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        $option = Option::create($validator->validated());
+
         return response()->json([
-            'status' => false,
-            'errors' => $validator->errors()
-        ], 400);
+            'status' => true,
+            'message' => 'Option created successfully',
+            'data' => $option
+        ], 201);
     }
-
-    $options = [];
-
-    foreach ($request->all() as $data) {
-        $options[] = Option::create($data);
-    }
-
-    return response()->json([
-        'status' => true,
-        'message' => 'Options created successfully',
-        'data' => $options
-    ], 201);
-}
 
     /**
      * Show a specific option
