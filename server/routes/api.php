@@ -6,6 +6,7 @@ use App\Http\Controllers\admin\StudentController;
 use App\Http\Controllers\admin\SubjectController;
 use App\Http\Controllers\admin\TeacherController;
 use App\Http\Controllers\studentauthController;
+use App\Http\Controllers\teacher\OptionController;
 use App\Http\Controllers\teacher\QuestionController;
 use App\Http\Controllers\teacher\QuizController;
 use App\Http\Controllers\TeacherAuthController;
@@ -97,6 +98,12 @@ Route::post('questions', [QuestionController::class, 'store']);
 Route::delete('questions/{id}', [QuestionController::class, 'destroy']);
 Route::get('questions/{id}', [QuestionController::class, 'show']);
 
+//teacher option routes
+Route::post('options', [OptionController::class, 'store']);
+     Route::get('options', [OptionController::class, 'index']);
+     Route::put('options/{id}', [OptionController::class, 'update']);
+Route::delete('options/{id}', [OptionController::class, 'destroy']);
+Route::get('options/{id}', [OptionController::class, 'show']);
 
 
 
