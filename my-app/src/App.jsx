@@ -63,7 +63,11 @@ function App() {
           <Teacher />
           </RequireAuth>
           } />
-        <Route path="/createquiz" element={<CreateQuiz />} />
+        <Route path="/createquiz" element={
+          <RequireAuth>
+          <CreateQuiz />
+          </RequireAuth>
+          } />
         <Route path="/view" element={<View />} />
         <Route path="/manage" element={<ManageStude />} />
         <Route path="/grade" element={<GradeSub />} />

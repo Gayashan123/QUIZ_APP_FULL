@@ -37,7 +37,7 @@ class QuizController extends Controller
             'passing_score' => 'required|integer|min:0',
             'start_time'    => 'required|date',
             'end_time'      => 'required|date|after:start_time',
-            'end_date'      => 'required|date',
+
         ]);
 
         if ($validator->fails()) {
@@ -99,7 +99,7 @@ class QuizController extends Controller
             'passing_score' => 'sometimes|integer|min:0',
             'start_time'    => 'sometimes|date',
             'end_time'      => 'sometimes|date|after:start_time',
-            'end_date'      => 'sometimes|date',
+
         ]);
 
         if ($validator->fails()) {

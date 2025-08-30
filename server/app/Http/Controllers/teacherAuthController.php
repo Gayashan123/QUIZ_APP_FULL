@@ -6,6 +6,7 @@ use App\Models\Teacher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class TeacherAuthController extends Controller
 {
@@ -43,12 +44,36 @@ class TeacherAuthController extends Controller
 
     public function logout(Request $request)
     {
-        $teacher = $request->user(); // Authenticated teacher via Sanctum
-        $teacher->tokens()->delete();
+        $teacher = Auth::guard('teacher')->user(); // Use teacher guard
+        if ($teacher) {
+            $teacher->tokens()->delete();
+        }
 
         return response()->json([
             'status' => true,
             'message' => 'Logged out successfully.',
+        ]);
+    }
+
+    // New method: check authenticated teacher
+    public function checkAuth(Request $request)
+    {
+        $teacher = Auth::guard('teacher')->user(); // explicitly use teacher guard
+
+        if (!$teacher) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unauthenticated'
+            ], 401);
+        }
+
+        return response()->json([
+            'status' => true,
+            'teacher' => [
+                'id' => $teacher->id,
+                'name' => $teacher->name,
+                'email' => $teacher->email,
+            ],
         ]);
     }
 }
