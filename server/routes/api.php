@@ -6,6 +6,7 @@ use App\Http\Controllers\admin\StudentController;
 use App\Http\Controllers\admin\SubjectController;
 use App\Http\Controllers\admin\TeacherController;
 use App\Http\Controllers\studentauthController;
+use App\Http\Controllers\teacher\QuestionController;
 use App\Http\Controllers\teacher\QuizController;
 use App\Http\Controllers\TeacherAuthController;
 use Illuminate\Http\Request;
@@ -87,6 +88,15 @@ Route::post('quizzes', [QuizController::class, 'store']);
      Route::put('quizzes/{id}', [QuizController::class, 'update']);
 Route::delete('quizzes/{id}', [QuizController::class, 'destroy']);
 Route::get('quizzes/{id}', [QuizController::class, 'show']);
+
+
+//teacher question routes
+Route::post('questions', [QuestionController::class, 'store']);
+     Route::get('questions', [QuestionController::class, 'index']);
+     Route::put('questions/{id}', [QuestionController::class, 'update']);
+Route::delete('questions/{id}', [QuestionController::class, 'destroy']);
+Route::get('questions/{id}', [QuestionController::class, 'show']);
+
 
 
 
