@@ -9,33 +9,16 @@ import {
   FiLogOut,
 } from "react-icons/fi";
 import { FaChartBar } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/Auth";
 import NavItem from "./NavItem";
 
-export default function Sidebar() {
+export default function Sidebar({ teacherName = "Teacher" }) {
   const navigate = useNavigate();
-  const { user, logout } = useContext(AuthContext);
+  const { logout } = useContext(AuthContext);
 
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Teacher name from AuthContext, with safe fallback to localStorage or "Teacher"
-  const teacherName = useMemo(() => {
-    if (user?.name) return user.name;
-    try {
-      const raw = localStorage.getItem("userInfo");
-      if (raw) {
-        const obj = JSON.parse(raw);
-        const n =
-          obj?.name ||
-          obj?.user?.name ||
-          [obj?.first_name, obj?.last_name].filter(Boolean).join(" ");
-        if (n?.trim()) return n.trim();
-      }
-    } catch {}
-    return "Teacher";
-  }, [user?.name]);
+  const [collapsed, setCollapsed] = useState(false); // desktop collapse
+  const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
 
   const initials = useMemo(() => {
     if (!teacherName) return "T";
@@ -49,7 +32,7 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     try {
-      const token = user?.token || localStorage.getItem("authToken");
+      const token = localStorage.getItem("authToken");
       if (token) {
         await fetch("http://127.0.0.1:8000/api/telogout", {
           method: "POST",
@@ -62,24 +45,29 @@ export default function Sidebar() {
     } catch (e) {
       console.error("Logout failed:", e);
     } finally {
+      localStorage.removeItem("authToken");
       logout?.();
-      setMobileOpen(false);
       navigate("/login");
+      setMobileOpen(false);
     }
   };
 
   const nav = [
     { key: "dashboard", label: "Dashboard", to: "/home", icon: <FiBarChart2 />, tone: "indigo" },
-    { key: "my-quizzes", label: "My Quizzes", to: "/createquiz", icon: <FiBook />, tone: "sky" },
-    { key: "manage", label: "Manage Quizzes", to: "/manage", icon: <FiUsers />, tone: "emerald" },
+
+    { key: "students", label: "Quizzes", to: "/manage", icon: <FiUsers />, tone: "emerald" },
     { key: "analytics", label: "Analytics", to: "/view", icon: <FaChartBar />, tone: "violet" },
     { key: "settings", label: "Settings", to: "/settings", icon: <FiSettings />, tone: "slate" },
+    // Logout is a button (no NavLink)
     { key: "logout", label: "Logout", icon: <FiLogOut />, tone: "rose", onClick: handleLogout },
   ];
 
   const Brand = (
     <div className="flex items-center gap-3">
-      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold">
+      <div
+        className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold"
+        aria-hidden
+      >
         JQ
       </div>
       {!collapsed && (
@@ -109,6 +97,7 @@ export default function Sidebar() {
     </div>
   );
 
+  // Desktop Sidebar
   const Desktop = (
     <aside
       className={`hidden md:flex flex-col ${
@@ -157,6 +146,7 @@ export default function Sidebar() {
     </aside>
   );
 
+  // Mobile button (floating)
   const MobileToggle = (
     <div className="md:hidden fixed top-4 right-4 z-50">
       <button
@@ -169,6 +159,7 @@ export default function Sidebar() {
     </div>
   );
 
+  // Mobile Drawer
   const Mobile = (
     <div className={`md:hidden ${mobileOpen ? "block" : "hidden"}`}>
       <div
@@ -206,7 +197,12 @@ export default function Sidebar() {
                 {item.label}
               </NavItem>
             ) : (
-              <NavItem key={item.key} icon={item.icon} tone={item.tone} onClick={item.onClick}>
+              <NavItem
+                key={item.key}
+                icon={item.icon}
+                tone={item.tone}
+                onClick={item.onClick}
+              >
                 {item.label}
               </NavItem>
             )

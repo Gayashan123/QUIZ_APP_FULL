@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useMemo } from "react";
 import Sidebar from "../components/Sidebar";
 import TopNav from "../components/TopNav";
 import StatCard from "../components/StatCard";
@@ -9,6 +9,7 @@ import NotificationItem from "../components/NotificationItem";
 import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
 import { AuthContext } from "../../context/Auth";
 
+/* ---------------- Helpers: API + formatting ---------------- */
 const normalizeBase = (base) =>
   typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/";
 const API_ROOT = normalizeBase(apiurl);
@@ -48,25 +49,11 @@ const statusOf = (q, now = new Date()) => {
   return "unknown";
 };
 
+/* ---------------- Component ---------------- */
 export default function TeacherHome() {
-  const { user } = useContext(AuthContext); // Get user from context
+  const { user, login } = useContext(AuthContext);
 
-  // Determine teacher name
-  const teacherName = useMemo(() => {
-    if (user?.name) return user.name;
-    try {
-      const raw = localStorage.getItem("userInfo");
-      if (raw) {
-        const obj = JSON.parse(raw);
-        const n =
-          obj?.name ||
-          obj?.user?.name ||
-          [obj?.first_name, obj?.last_name].filter(Boolean).join(" ");
-        if (n?.trim()) return n.trim();
-      }
-    } catch {}
-    return "Teacher";
-  }, [user]);
+  const [teacherName, setTeacherName] = useState(user?.name || "Teacher");
 
   const initials = useMemo(() => {
     return teacherName
@@ -82,6 +69,7 @@ export default function TeacherHome() {
     return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   }, []);
 
+  // Dashboard data
   const [totalQuizzes, setTotalQuizzes] = useState(0);
   const [upcomingQuizzes, setUpcomingQuizzes] = useState(0);
   const [recentQuizzes, setRecentQuizzes] = useState([]);
@@ -95,7 +83,62 @@ export default function TeacherHome() {
     topPerformingQuiz: "N/A",
   });
 
-  // Fetch quizzes
+  // ------------------ Load teacher name ------------------
+  useEffect(() => {
+    const authToken = user?.token || resolveToken();
+    if (!authToken) return;
+
+    const persist = (next) => {
+      try {
+        const raw = localStorage.getItem("userInfo");
+        const prev = raw ? JSON.parse(raw) : {};
+        const merged = { ...prev, ...next };
+        localStorage.setItem("userInfo", JSON.stringify(merged));
+      } catch {}
+      login?.((prev) => (typeof prev === "object" ? { ...prev, ...next } : next));
+      if (next.name) setTeacherName(next.name);
+    };
+
+    const loadTeacher = async () => {
+      let nameAcc = user?.name || null;
+
+      // Try localStorage first
+      try {
+        const raw = localStorage.getItem("userInfo");
+        if (raw) {
+          const obj = JSON.parse(raw);
+          if (!nameAcc) {
+            const n =
+              obj?.name ||
+              obj?.user?.name ||
+              [obj?.first_name, obj?.last_name].filter(Boolean).join(" ");
+            if (n && n.trim()) nameAcc = n.trim();
+          }
+        }
+      } catch {}
+
+      // Try /checkauth API
+      if (!nameAcc) {
+        try {
+          const data = await fetchJSON(`${API_ROOT}checkauth`);
+          const nameFromApi =
+            data?.data?.name ||
+            data?.user?.name ||
+            data?.name ||
+            null;
+          if (nameFromApi) persist({ name: nameFromApi });
+        } catch (e) {
+          console.error("checkauth failed:", e);
+        }
+      } else {
+        setTeacherName(nameAcc);
+      }
+    };
+
+    loadTeacher();
+  }, [user?.token, login]);
+
+  // ------------------ Fetch quizzes ------------------
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -115,8 +158,12 @@ export default function TeacherHome() {
         setUpcomingQuizzes(upcoming);
 
         const sorted = [...quizzes].sort((a, b) => {
-          const A = parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() || 0;
-          const B = parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() || 0;
+          const A =
+            parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() ||
+            0;
+          const B =
+            parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() ||
+            0;
           return B - A;
         });
         setRecentQuizzes(sorted.slice(0, 5));
@@ -127,11 +174,16 @@ export default function TeacherHome() {
         const completionRates = quizzes
           .map((q) => Number(q.completion_rate))
           .filter(Number.isFinite);
-        const averageScore = avgScores.length ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length) : 0;
-        const completionRate = completionRates.length ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length) : 0;
-        const topQuiz = [...quizzes]
-          .filter((q) => Number.isFinite(Number(q.average_score)))
-          .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] || null;
+        const averageScore = avgScores.length
+          ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length)
+          : 0;
+        const completionRate = completionRates.length
+          ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length)
+          : 0;
+        const topQuiz =
+          [...quizzes]
+            .filter((q) => Number.isFinite(Number(q.average_score)))
+            .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] || null;
 
         setPerformanceStats({
           averageScore,
@@ -145,7 +197,9 @@ export default function TeacherHome() {
       }
     };
     load();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   return (
@@ -162,7 +216,7 @@ export default function TeacherHome() {
           </section>
 
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard title="Total Quizzes" value={totalQuizzes} change="" icon="clipboard" />
+            <StatCard title="Total Quizzes" value={totalQuizzes} change={loadingQuizzes ? "…" : ""} icon="clipboard" />
             <StatCard title="Active Students" value={totalStudents} change="" icon="students" />
             <StatCard title="Upcoming Quizzes" value={upcomingQuizzes} change="" icon="calendar" />
           </section>
@@ -202,9 +256,9 @@ export default function TeacherHome() {
 
             <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
               <h2 className="text-xl font-semibold mb-6">Notifications</h2>
-              {notifications.length > 0 ? notifications.map((n) => (
-                <NotificationItem key={n.id} notification={n} />
-              )) : (
+              {notifications.length > 0 ? (
+                notifications.map((n) => <NotificationItem key={n.id} notification={n} />)
+              ) : (
                 <p className="text-sm text-slate-600">You're all caught up.</p>
               )}
             </div>

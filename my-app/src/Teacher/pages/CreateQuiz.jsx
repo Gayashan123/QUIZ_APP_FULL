@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, Home, Eye, EyeOff } from "lucide-react";
-import Sidebar from "../components/Sidebar";
+import { Save, Home } from "lucide-react";
 import {
   Grid,
   Typography,
@@ -23,7 +22,6 @@ import {
   Snackbar,
   Alert,
   MenuItem,
-  InputAdornment,
 } from "@mui/material";
 import {
   AddCircleOutline,
@@ -42,13 +40,14 @@ const steps = ["Quiz Details", "Add Questions", "Review & Publish"];
 /* ------------------------- Date helpers (local, safe) ------------------------- */
 function parseLocalDateTime(value) {
   if (!value) return null;
-  const d = new Date(value);
+  const d = new Date(value); // datetime-local string -> local Date
   return isNaN(d.getTime()) ? null : d;
 }
 function pad2(n) {
   return n.toString().padStart(2, "0");
 }
 function toLocalSqlDateTime(date) {
+  // YYYY-MM-DD HH:mm:ss in local time
   const y = date.getFullYear();
   const m = pad2(date.getMonth() + 1);
   const d = pad2(date.getDate());
@@ -138,7 +137,6 @@ export default function CreateQuiz() {
 
   const [activeStep, setActiveStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   const [quiz, setQuiz] = useState({
     quiz_title: "",
@@ -158,24 +156,6 @@ export default function CreateQuiz() {
     severity: "success",
   });
 
-  // Name for Sidebar
-  const teacherName = useMemo(() => {
-    if (user?.name) return user.name;
-    if (user?.user?.name) return user.user.name;
-    try {
-      const raw = localStorage.getItem("userInfo");
-      if (raw) {
-        const obj = JSON.parse(raw);
-        const n =
-          obj?.name ||
-          obj?.user?.name ||
-          [obj?.first_name, obj?.last_name].filter(Boolean).join(" ");
-        if (n && n.trim()) return n.trim();
-      }
-    } catch {}
-    return "Teacher";
-  }, [user]);
-
   // Use latest token (context first, then LS)
   const authToken = user?.token || tokenFromLS() || "";
   const headers = useMemo(
@@ -192,8 +172,6 @@ export default function CreateQuiz() {
 
   const handleSnackbarClose = () =>
     setSnackbar({ open: false, message: "", severity: "success" });
-
-  const handleClickShowPassword = () => setShowPassword((show) => !show);
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -360,6 +338,7 @@ export default function CreateQuiz() {
     null;
 
   // Create quiz, then questions, then options (cascade)
+  // Uses flat endpoints: POST /api/questions and POST /api/options
   const createQuizCascade = async (quizPayload, questions) => {
     // 1) Create Quiz
     const resQuiz = await fetch(`${apiurl}quizzes`, {
@@ -381,7 +360,7 @@ export default function CreateQuiz() {
         question_text: q.text.trim(),
         points: Number(q.points),
         explanation: q.explanation?.trim() || null,
-        image_url: q.imageUrl || null,
+        image_url: q.imageUrl || null, // adjust/remove if backend doesn't use images
       };
 
       const resQuestion = await fetch(`${apiurl}questions`, {
@@ -404,6 +383,7 @@ export default function CreateQuiz() {
         const optPayload = {
           question_id: Number(questionId),
           option_text: q.options[idx].trim(),
+          // If your API expects true/false, change to: is_correct: idx === q.correctAnswer
           is_correct: idx === q.correctAnswer ? 1 : 0,
         };
         const resOpt = await fetch(`${apiurl}options`, {
@@ -439,6 +419,7 @@ export default function CreateQuiz() {
       return;
     }
 
+    // Format date-times safely in local SQL format
     const startDate = parseLocalDateTime(quiz.start_time);
     const endDate = parseLocalDateTime(quiz.end_time);
     if (!startDate || !endDate) {
@@ -446,10 +427,13 @@ export default function CreateQuiz() {
       return;
     }
 
+    // Base quiz payload WITHOUT nested questions (cascade creation instead)
+    // Includes both common and original keys to maximize backend compatibility
     const startSql = toLocalSqlDateTime(startDate);
     const endSql = toLocalSqlDateTime(endDate);
     const quizPayload = {
       teacher_id: Number(teacher_id),
+      // titles/password variants
       title: quiz.quiz_title.trim(),
       quiz_title: quiz.quiz_title.trim(),
       password: quiz.quiz_password?.trim() || null,
@@ -457,6 +441,7 @@ export default function CreateQuiz() {
       subject_id: Number(quiz.subject_id),
       time_limit: Number(quiz.time_limit),
       passing_score: Number(quiz.passing_score),
+      // datetime variants
       start_at: startSql,
       end_at: endSql,
       start_time: startSql,
@@ -503,12 +488,6 @@ export default function CreateQuiz() {
           onChange={handleChange}
           required
           variant="outlined"
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              borderRadius: "12px",
-              "&:hover fieldset": { borderColor: "#4f46e5" },
-            },
-          }}
         />
 
         <TextField
@@ -520,12 +499,6 @@ export default function CreateQuiz() {
           onChange={handleChange}
           required
           variant="outlined"
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              borderRadius: "12px",
-              "&:hover fieldset": { borderColor: "#4f46e5" },
-            },
-          }}
         >
           <MenuItem value="">Select a subject</MenuItem>
           {subjects.map((subject) => (
@@ -541,28 +514,8 @@ export default function CreateQuiz() {
           name="quiz_password"
           value={quiz.quiz_password}
           onChange={handleChange}
-          type={showPassword ? "text" : "password"}
+          type="password"
           variant="outlined"
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              borderRadius: "12px",
-              "&:hover fieldset": { borderColor: "#4f46e5" },
-            },
-          }}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  aria-label="toggle password visibility"
-                  onClick={handleClickShowPassword}
-                  edge="end"
-                  sx={{ color: "#4f46e5" }}
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
         />
 
         <Grid container spacing={2}>
@@ -576,12 +529,6 @@ export default function CreateQuiz() {
               required
               variant="outlined"
               inputProps={{ min: 1 }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "12px",
-                  "&:hover fieldset": { borderColor: "#4f46e5" },
-                },
-              }}
             />
           </Grid>
           <Grid item xs={12} md={6}>
@@ -594,12 +541,6 @@ export default function CreateQuiz() {
               required
               variant="outlined"
               inputProps={{ min: 0, max: 100 }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "12px",
-                  "&:hover fieldset": { borderColor: "#4f46e5" },
-                },
-              }}
             />
           </Grid>
         </Grid>
@@ -615,12 +556,6 @@ export default function CreateQuiz() {
               required
               variant="outlined"
               InputLabelProps={{ shrink: true }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "12px",
-                  "&:hover fieldset": { borderColor: "#4f46e5" },
-                },
-              }}
             />
           </Grid>
           <Grid item xs={12} md={6}>
@@ -633,12 +568,6 @@ export default function CreateQuiz() {
               required
               variant="outlined"
               InputLabelProps={{ shrink: true }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "12px",
-                  "&:hover fieldset": { borderColor: "#4f46e5" },
-                },
-              }}
             />
           </Grid>
         </Grid>
@@ -660,11 +589,12 @@ export default function CreateQuiz() {
     const [isUploading, setIsUploading] = useState(false);
     const [tabValue, setTabValue] = useState(0);
     const [validationErrors, setValidationErrors] = useState({});
-    theconst [editIndex, setEditIndex] = useState(null); // NOTE: if "theconst" was a typo, remove "the"
+    const [editIndex, setEditIndex] = useState(null);
     const [imagePreview, setImagePreview] = useState("");
 
     useEffect(() => {
       if (tabValue === 1 && editIndex !== null) {
+        // switching to PDF upload mode cancels editing
         resetCurrentQuestion();
       }
     }, [tabValue]); // eslint-disable-line
@@ -822,6 +752,7 @@ export default function CreateQuiz() {
       const file = event.target.files[0];
       if (file && file.type === "application/pdf") {
         setIsUploading(true);
+        // Replace with actual PDF processing
         setTimeout(() => {
           const mockExtractedQuestions = [
             {
@@ -1199,14 +1130,9 @@ export default function CreateQuiz() {
     );
   };
 
-  // Layout with Sidebar on the left and content on the right
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex", background: "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)" }}>
-      {/* Sidebar */}
-      <Sidebar teacherName={teacherName} />
-
-      {/* Main content */}
-      <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
+    <Box sx={{ minHeight: "100vh", background: "#f3f4f6", display: "flex" }}>
+      <Box sx={{ flex: 1 }}>
         <Snackbar
           open={snackbar.open}
           autoHideDuration={5000}
@@ -1219,84 +1145,43 @@ export default function CreateQuiz() {
         </Snackbar>
 
         <Box sx={{ maxWidth: "900px", mx: "auto", px: 2, py: 6 }}>
-          <Box sx={{
-            background: "#fff",
-            borderRadius: 4,
-            boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
-            p: { xs: 2, md: 6 },
-            mt: 4,
-            border: "1px solid rgba(0,0,0,0.05)"
-          }}>
+          <Box sx={{ background: "#fff", borderRadius: 4, boxShadow: 2, p: { xs: 2, md: 6 }, mt: 4 }}>
             <Box sx={{ display: "flex", justifyContent: "end", mb: 4 }}>
-              <Button
-                onClick={() => navigate("/home")}
-                variant="outlined"
-                startIcon={<Home size={20} />}
-                sx={{
-                  fontWeight: 600,
-                  borderRadius: "12px",
-                  borderColor: "#e2e8f0",
-                  color: "#4f46e5",
-                  "&:hover": {
-                    borderColor: "#4f46e5",
-                    backgroundColor: "rgba(79, 70, 229, 0.04)"
-                  }
-                }}
-              >
+              <Button onClick={() => navigate("/home")} variant="outlined" startIcon={<Home />} sx={{ fontWeight: 600 }}>
                 Home
               </Button>
             </Box>
 
-            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 8, position: "relative" }}>
-              <Box sx={{
-                position: "absolute",
-                top: "50%",
-                left: 0,
-                right: 0,
-                height: "2px",
-                backgroundColor: "#e2e8f0",
-                transform: "translateY(-50%)",
-                zIndex: 1
-              }} />
+            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 8 }}>
               {steps.map((label, index) => (
                 <Box
                   key={label}
                   sx={{
-                    position: "relative",
-                    zIndex: 2,
+                    flex: 1,
                     textAlign: "center",
                     fontWeight: 600,
-                    color: index === activeStep ? "primary.main" : index < activeStep ? "#10b981" : "text.secondary",
+                    color: index === activeStep ? "primary.main" : "text.secondary",
                   }}
                 >
                   <Box
                     sx={{
-                      width: 40,
-                      height: 40,
+                      width: 16,
+                      height: 16,
                       mx: "auto",
                       borderRadius: "50%",
                       mb: 1,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: index <= activeStep ? (index === activeStep ? "#4f46e5" : "#10b981") : "#cbd5e1",
-                      color: "white",
-                      fontSize: "16px",
-                      fontWeight: "bold",
-                      boxShadow: "0 4px 6px rgba(0,0,0,0.1)"
+                      background: index <= activeStep ? "#6366f1" : "#cbd5e1",
                     }}
-                  >
-                    {index < activeStep ? "✓" : index + 1}
-                  </Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: "14px" }}>
-                    {label}
-                  </Typography>
+                  />
+                  {label}
                 </Box>
               ))}
             </Box>
 
             {activeStep === 0 && <QuizDetailsStep quiz={quiz} setQuiz={setQuiz} subjects={subjects} />}
+
             {activeStep === 1 && <AddQuestionsStep quiz={quiz} setQuiz={setQuiz} showSnackbar={showSnackbar} />}
+
             {activeStep === 2 && <ReviewStep quiz={quiz} subjects={subjects} />}
 
             <Box sx={{ mt: 8, display: "flex", flexDirection: { xs: "column", sm: "row" }, justifyContent: "space-between", gap: 2 }}>
@@ -1304,18 +1189,7 @@ export default function CreateQuiz() {
                 onClick={handleBack}
                 disabled={activeStep === 0 || isSubmitting}
                 variant="outlined"
-                sx={{
-                  fontWeight: 600,
-                  px: 4,
-                  py: 1.5,
-                  borderRadius: "12px",
-                  borderColor: "#e2e8f0",
-                  color: "#4f46e5",
-                  "&:hover": {
-                    borderColor: "#4f46e5",
-                    backgroundColor: "rgba(79, 70, 229, 0.04)"
-                  }
-                }}
+                sx={{ fontWeight: 600, px: 4, py: 1.5 }}
               >
                 Back
               </Button>
@@ -1325,18 +1199,13 @@ export default function CreateQuiz() {
                   onClick={submitQuiz}
                   disabled={isSubmitting}
                   variant="contained"
-                  startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <Save size={20} />}
+                  startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <Save />}
                   sx={{
                     px: 4,
                     py: 1.5,
                     fontWeight: 600,
-                    borderRadius: "12px",
                     background: "linear-gradient(90deg, #10b981 0%, #22d3ee 100%)",
-                    "&:hover": {
-                      background: "linear-gradient(90deg, #059669 0%, #0ea5e9 100%)",
-                      boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
-                    },
-                    boxShadow: "0 4px 6px rgba(16, 185, 129, 0.2)"
+                    "&:hover": { background: "linear-gradient(90deg, #059669 0%, #0ea5e9 100%)" },
                   }}
                 >
                   {isSubmitting ? "Publishing..." : "Publish Quiz"}
@@ -1350,13 +1219,8 @@ export default function CreateQuiz() {
                     px: 4,
                     py: 1.5,
                     fontWeight: 600,
-                    borderRadius: "12px",
                     background: "linear-gradient(90deg, #6366f1 0%, #a78bfa 100%)",
-                    "&:hover": {
-                      background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)",
-                      boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)"
-                    },
-                    boxShadow: "0 4px 6px rgba(99, 102, 241, 0.2)"
+                    "&:hover": { background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)" },
                   }}
                 >
                   Continue
