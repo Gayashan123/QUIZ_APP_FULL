@@ -1,22 +1,25 @@
+// src/Teacher/components/QuizCard.jsx
 import React from "react";
-import { FaChevronRight } from "react-icons/fa";
 
 export default function QuizCard({ quiz }) {
+  if (!quiz) return null;
+
   return (
-    <div className="flex justify-between items-center p-4 border border-gray-200 rounded-lg hover:border-indigo-300 transition">
-      <div>
-        <h3 className="font-medium">{quiz.title}</h3>
-        <div className="flex gap-4 mt-1">
-          <span className="text-xs text-gray-500">{quiz.subject}</span>
-          <span className="text-xs text-gray-500">{quiz.submissions} submissions</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-500">{quiz.date}</span>
-        <button className="text-gray-400 hover:text-indigo-600">
-          <FaChevronRight />
-        </button>
-      </div>
+    <div className="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur p-4 shadow-sm">
+      {/* Quiz Name */}
+      <h3 className="text-lg font-semibold text-slate-900">{quiz.name || quiz.quiz_title || "Untitled Quiz"}</h3>
+      
+    
+
+      {/* Created At */}
+      <p className="text-sm text-slate-500 mt-1">
+        Sta-Date: {quiz.start_time ? new Date(quiz.start_time).toLocaleDateString() : "Unknown"}
+      </p>
+
+      {/* Optional: Updated At */}
+      <p className="text-sm text-slate-500 mt-1">
+        End-Date:     {quiz.end_time ? new Date(quiz.end_time).toLocaleDateString() : "Unknown"}
+      </p>
     </div>
   );
 }

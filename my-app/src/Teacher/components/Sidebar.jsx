@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import {
   FiBarChart2,
   FiBook,
@@ -9,19 +9,47 @@ import {
   FiLogOut,
 } from "react-icons/fi";
 import { FaChartBar } from "react-icons/fa";
-import NavItem from "./NavItem";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/Auth";
+import NavItem from "./NavItem";
 
-export default function Sidebar({ teacherName }) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+export default function Sidebar() {
   const navigate = useNavigate();
-  const { logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
 
-  // 🔹 Logout function
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Teacher name from AuthContext, with safe fallback to localStorage or "Teacher"
+  const teacherName = useMemo(() => {
+    if (user?.name) return user.name;
+    try {
+      const raw = localStorage.getItem("userInfo");
+      if (raw) {
+        const obj = JSON.parse(raw);
+        const n =
+          obj?.name ||
+          obj?.user?.name ||
+          [obj?.first_name, obj?.last_name].filter(Boolean).join(" ");
+        if (n?.trim()) return n.trim();
+      }
+    } catch {}
+    return "Teacher";
+  }, [user?.name]);
+
+  const initials = useMemo(() => {
+    if (!teacherName) return "T";
+    return teacherName
+      .split(" ")
+      .filter(Boolean)
+      .map((n) => n[0]?.toUpperCase())
+      .slice(0, 2)
+      .join("");
+  }, [teacherName]);
+
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem("authToken");
+      const token = user?.token || localStorage.getItem("authToken");
       if (token) {
         await fetch("http://127.0.0.1:8000/api/telogout", {
           method: "POST",
@@ -31,132 +59,170 @@ export default function Sidebar({ teacherName }) {
           },
         });
       }
-
-      // Clear local storage & context
-      localStorage.removeItem("authToken");
-      logout();
+    } catch (e) {
+      console.error("Logout failed:", e);
+    } finally {
+      logout?.();
+      setMobileOpen(false);
       navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
     }
   };
 
-  return (
-    <>
-      {/* Mobile Menu Button (only visible on small screens) */}
-      <div className="md:hidden fixed top-4 right-4 z-50">
+  const nav = [
+    { key: "dashboard", label: "Dashboard", to: "/home", icon: <FiBarChart2 />, tone: "indigo" },
+    { key: "my-quizzes", label: "My Quizzes", to: "/createquiz", icon: <FiBook />, tone: "sky" },
+    { key: "manage", label: "Manage Quizzes", to: "/manage", icon: <FiUsers />, tone: "emerald" },
+    { key: "analytics", label: "Analytics", to: "/view", icon: <FaChartBar />, tone: "violet" },
+    { key: "settings", label: "Settings", to: "/settings", icon: <FiSettings />, tone: "slate" },
+    { key: "logout", label: "Logout", icon: <FiLogOut />, tone: "rose", onClick: handleLogout },
+  ];
+
+  const Brand = (
+    <div className="flex items-center gap-3">
+      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold">
+        JQ
+      </div>
+      {!collapsed && (
+        <div>
+          <h1 className="text-xl font-extrabold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent leading-tight">
+            JuizzQuiz
+          </h1>
+          <p className="text-xs text-slate-500 -mt-0.5">Teacher Portal</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const UserCard = (
+    <div className={`mt-auto pt-6 border-t border-slate-200 ${collapsed ? "px-0" : ""}`}>
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+          {initials}
+        </div>
+        {!collapsed && (
+          <div>
+            <p className="font-medium truncate max-w-[10rem]">{teacherName}</p>
+            <p className="text-xs text-slate-500">Teacher</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const Desktop = (
+    <aside
+      className={`hidden md:flex flex-col ${
+        collapsed ? "w-20" : "w-64"
+      } bg-white/90 backdrop-blur border-r border-slate-200 p-4 sticky top-0 h-screen transition-all duration-300`}
+    >
+      <div className="flex items-center justify-between mb-6">
+        {Brand}
         <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 rounded-lg bg-indigo-600 text-white shadow-lg"
+          className="hidden md:inline-flex p-2 rounded-xl hover:bg-slate-100 transition"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "Expand" : "Collapse"}
         >
-          {isMobileMenuOpen ? <FiX size={24} /> : <FiMenu size={24} />}
+          <FiMenu />
         </button>
       </div>
 
-      {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 p-6 sticky top-0 h-screen">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-indigo-700">JuizzQuiz</h1>
-          <p className="text-sm text-gray-500">Teacher Portal</p>
+      <nav className="flex flex-col gap-1">
+        {nav.map((item) =>
+          item.to ? (
+            <NavItem
+              key={item.key}
+              to={item.to}
+              icon={item.icon}
+              tone={item.tone}
+              collapsed={collapsed}
+              onClick={() => setMobileOpen(false)}
+            >
+              {item.label}
+            </NavItem>
+          ) : (
+            <NavItem
+              key={item.key}
+              icon={item.icon}
+              tone={item.tone}
+              collapsed={collapsed}
+              onClick={item.onClick}
+            >
+              {item.label}
+            </NavItem>
+          )
+        )}
+      </nav>
+
+      {UserCard}
+    </aside>
+  );
+
+  const MobileToggle = (
+    <div className="md:hidden fixed top-4 right-4 z-50">
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="p-2 rounded-xl bg-indigo-600 text-white shadow-lg active:scale-95 transition"
+        aria-label="Open menu"
+      >
+        <FiMenu size={22} />
+      </button>
+    </div>
+  );
+
+  const Mobile = (
+    <div className={`md:hidden ${mobileOpen ? "block" : "hidden"}`}>
+      <div
+        className="fixed inset-0 z-40 bg-black/50"
+        onClick={() => setMobileOpen(false)}
+        aria-hidden
+      />
+      <div
+        className={`fixed left-0 top-0 bottom-0 z-50 w-4/5 max-w-sm bg-white shadow-2xl p-5 flex flex-col
+        transform transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-center justify-between mb-6">
+          {Brand}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="p-2 rounded-xl hover:bg-slate-100 transition"
+            aria-label="Close menu"
+          >
+            <FiX size={22} />
+          </button>
         </div>
 
         <nav className="flex flex-col gap-1">
-          <NavItem icon={<FiBarChart2 />} active>
-            Dashboard
-          </NavItem>
-          <NavItem icon={<FiBook />} onClick={() => navigate("/createquiz")}>
-            My Quizzes
-          </NavItem>
-          <NavItem icon={<FiUsers />} onClick={() => navigate("/manage")}>
-            Students
-          </NavItem>
-          <NavItem icon={<FaChartBar />} onClick={() => navigate("/view")}>
-            Analytics
-          </NavItem>
-          <NavItem icon={<FiSettings />} onClick={() => navigate("/settings")}>
-            Settings
-          </NavItem>
-          <NavItem icon={<FiLogOut />} onClick={handleLogout}>
-            Logout
-          </NavItem>
+          {nav.map((item) =>
+            item.to ? (
+              <NavItem
+                key={item.key}
+                to={item.to}
+                icon={item.icon}
+                tone={item.tone}
+                onClick={() => setMobileOpen(false)}
+              >
+                {item.label}
+              </NavItem>
+            ) : (
+              <NavItem key={item.key} icon={item.icon} tone={item.tone} onClick={item.onClick}>
+                {item.label}
+              </NavItem>
+            )
+          )}
         </nav>
 
-        <div className="mt-auto pt-6 border-t border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-              {teacherName
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </div>
-            <div>
-              <p className="font-medium">{teacherName}</p>
-              <p className="text-xs text-gray-500">Teacher</p>
-            </div>
-          </div>
-        </div>
-      </aside>
+        {UserCard}
+      </div>
+    </div>
+  );
 
-      {/* Mobile Sidebar */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40">
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50"
-            onClick={() => setIsMobileMenuOpen(false)}
-          ></div>
-
-          {/* Sidebar Content */}
-          <div className="relative flex flex-col w-4/5 max-w-sm h-full bg-white shadow-xl p-6">
-            <div className="mb-10">
-              <h1 className="text-2xl font-bold text-indigo-700">JuizzQuiz</h1>
-              <p className="text-sm text-gray-500">Teacher Portal</p>
-            </div>
-
-            <nav className="flex flex-col gap-1">
-              <NavItem icon={<FiBarChart2 />} active>
-                Dashboard
-              </NavItem>
-              <NavItem
-                icon={<FiBook />}
-                onClick={() => navigate("/createquiz")}
-              >
-                My Quizzes
-              </NavItem>
-              <NavItem icon={<FiUsers />} onClick={() => navigate("/manage")}>
-                Students
-              </NavItem>
-              <NavItem icon={<FaChartBar />} onClick={() => navigate("/view")}>
-                Analytics
-              </NavItem>
-              <NavItem
-                icon={<FiSettings />}
-                onClick={() => navigate("/settings")}
-              >
-                Settings
-              </NavItem>
-              <NavItem icon={<FiLogOut />} onClick={handleLogout}>
-                Logout
-              </NavItem>
-            </nav>
-
-            <div className="mt-auto pt-6 border-t border-gray-200">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-                  {teacherName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </div>
-                <div>
-                  <p className="font-medium">{teacherName}</p>
-                  <p className="text-xs text-gray-500">Teacher</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+  return (
+    <>
+      {Desktop}
+      {MobileToggle}
+      {Mobile}
     </>
   );
 }

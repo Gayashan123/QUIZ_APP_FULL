@@ -69,7 +69,14 @@ function App() {
           </RequireAuth>
           } />
         <Route path="/view" element={<View />} />
-        <Route path="/manage" element={<ManageStude />} />
+        
+        <Route path="/manage" element={
+          <RequireAuth>
+          <ManageStude />
+          </RequireAuth>
+          
+          } />
+        
         <Route path="/grade" element={<GradeSub />} />
         <Route path="/settings" element={<SettingPage />} />
 
