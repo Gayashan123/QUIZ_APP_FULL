@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\teacher;
-
+use App\Models\Quiz;
 use App\Models\Question;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -12,13 +12,43 @@ class QuestionController extends Controller
     /**
      * Display all questions
      */
-    public function index()
+    public function index(Request $request)
     {
-        $questions = Question::with('quiz')->orderBy('created_at', 'DESC')->get();
+        // OPTIONAL FILTER SUPPORT: /api/questions?quiz_id=123
+        $quizId = $request->query('quiz_id');
+        $query  = Question::with('quiz')->orderBy('created_at', 'DESC');
+
+        if ($quizId) {
+            $query->where('quiz_id', $quizId);
+        }
+
+        $questions = $query->get();
 
         return response()->json([
             'status' => true,
-            'data' => $questions
+            'data'   => $questions,
+        ], 200);
+    }
+
+    // ADD THIS: /api/quizzes/{quiz}/questions?include_options=true
+    public function indexByQuiz(Request $request, Quiz $quiz)
+    {
+        $includeOptions = filter_var($request->query('include_options'), FILTER_VALIDATE_BOOLEAN);
+
+        $query = $quiz->questions()->select('id', 'quiz_id', 'question_text', 'points');
+
+        if ($includeOptions) {
+            // NOTE: For student-facing calls, consider hiding is_correct here
+            $query->with(['options' => function ($q) {
+                $q->select('id', 'question_id', 'option_text', 'is_correct');
+            }]);
+        }
+
+        $questions = $query->orderBy('id')->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $questions,
         ], 200);
     }
 

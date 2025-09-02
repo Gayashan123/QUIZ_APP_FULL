@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\teacher;
-
+use App\Models\Question;
 use App\Models\Option;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -12,13 +12,35 @@ class OptionController extends Controller
     /**
      * Display all options
      */
-    public function index()
+    public function index(Request $request)
     {
-        $options = Option::with('question')->orderBy('created_at', 'DESC')->get();
+        // OPTIONAL FILTER SUPPORT: /api/options?question_id=456
+        $questionId = $request->query('question_id');
+        $query = Option::with('question')->orderBy('created_at', 'DESC');
+
+        if ($questionId) {
+            $query->where('question_id', $questionId);
+        }
+
+        $options = $query->get();
 
         return response()->json([
             'status' => true,
-            'data' => $options
+            'data'   => $options,
+        ], 200);
+    }
+
+    // ADD THIS: /api/questions/{question}/options
+    public function indexByQuestion(Question $question)
+    {
+        $options = $question->options()
+            ->select('id', 'question_id', 'option_text', 'is_correct')
+            ->orderBy('id')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $options,
         ], 200);
     }
 

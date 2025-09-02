@@ -3,7 +3,6 @@ import { toast } from "react-toastify";
 import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
 import Sidebar from "../components/Sidebar";
 
-
 /* ========================= Utilities ========================= */
 const normalizeBase = (base) => base?.replace(/\/?$/, "/") || "/";
 const API_BASE = `${normalizeBase(apiurl)}quizzes`;
@@ -61,6 +60,22 @@ const fmt = (d) => {
   }
 };
 
+// Convert date to local datetime string for input[type="datetime-local"]
+const toLocalDateTime = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return "";
+  
+  // Format: YYYY-MM-DDTHH:MM
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const statusOf = (quiz, now = new Date()) => {
   const start = parseDate(quiz?.start_time || quiz?.start_at || quiz?.start);
   const end = parseDate(quiz?.end_time || quiz?.end_at || quiz?.end);
@@ -80,6 +95,8 @@ export default function ManageQuiz() {
   // Busy state for per-row actions
   const [togglingId, setTogglingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editingDates, setEditingDates] = useState({});
 
   // Filters / UI state
   const [search, setSearch] = useState("");
@@ -158,6 +175,51 @@ export default function ManageQuiz() {
       toast.error(`Publish toggle failed: ${e.message ?? e}`);
     } finally {
       setTogglingId(null);
+    }
+  };
+
+  const startEditing = (quiz) => {
+    setEditingId(quiz.id);
+    setEditingDates({
+      start_time: toLocalDateTime(quiz.start_time || quiz.start_at),
+      end_time: toLocalDateTime(quiz.end_time || quiz.end_at)
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditingDates({});
+  };
+
+  const handleDateChange = (field, value) => {
+    setEditingDates(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const saveDateChanges = async (quizId) => {
+    try {
+      // Convert back to ISO format for API
+      const updates = {};
+      if (editingDates.start_time) {
+        updates.start_time = new Date(editingDates.start_time).toISOString();
+      }
+      if (editingDates.end_time) {
+        updates.end_time = new Date(editingDates.end_time).toISOString();
+      }
+
+      await fetchJSON(`${API_BASE}/${quizId}`, {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+      
+      toast.success("Quiz dates updated");
+      setEditingId(null);
+      setEditingDates({});
+      await load();
+    } catch (e) {
+      toast.error(`Update failed: ${e.message ?? e}`);
     }
   };
 
@@ -256,7 +318,7 @@ export default function ManageQuiz() {
                     Manage Quizzes
                   </h1>
                   <p className="text-slate-600">
-                    Search, publish, monitor status, and delete quizzes.
+                    Search, publish, monitor status, edit dates, and delete quizzes.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -409,17 +471,60 @@ export default function ManageQuiz() {
                         const title = q?.name || q?.quiz_title || q?.title || `Quiz #${q?.id}`;
                         const code = q?.code || "—";
                         const st = statusOf(q, now);
-                        const schedule = (
-                          <div className="space-y-0.5">
-                            <div className="text-slate-900">{fmt(q.start_time || q.start_at)}</div>
-                            <div className="text-slate-500 text-xs">to {fmt(q.end_time || q.end_at)}</div>
-                          </div>
-                        );
+                        
                         return (
                           <tr key={q.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition">
                             <Td className="font-medium">{title}</Td>
                             <Td className="font-mono">{code}</Td>
-                            <Td>{schedule}</Td>
+                            <Td>
+                              {editingId === q.id ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-500 w-12">Start:</label>
+                                    <input
+                                      type="datetime-local"
+                                      value={editingDates.start_time || ""}
+                                      onChange={(e) => handleDateChange('start_time', e.target.value)}
+                                      className="text-xs px-2 py-1 border rounded"
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-500 w-12">End:</label>
+                                    <input
+                                      type="datetime-local"
+                                      value={editingDates.end_time || ""}
+                                      onChange={(e) => handleDateChange('end_time', e.target.value)}
+                                      className="text-xs px-2 py-1 border rounded"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2 mt-1">
+                                    <button
+                                      onClick={() => saveDateChanges(q.id)}
+                                      className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEditing}
+                                      className="text-xs px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <div className="text-slate-900">{fmt(q.start_time || q.start_at)}</div>
+                                  <div className="text-slate-500 text-xs">to {fmt(q.end_time || q.end_at)}</div>
+                                  <button
+                                    onClick={() => startEditing(q)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                                  >
+                                    Edit dates
+                                  </button>
+                                </div>
+                              )}
+                            </Td>
                             <Td>
                               <Badge
                                 tone={
@@ -445,13 +550,13 @@ export default function ManageQuiz() {
                                 <Switch
                                   checked={!!q?.is_published}
                                   onChange={() => handleTogglePublish(q)}
-                                  disabled={togglingId === q.id}
+                                  disabled={togglingId === q.id || editingId === q.id}
                                   ariaLabel="Toggle publish"
                                 />
                                 <button
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
                                   onClick={() => handleDelete(q.id)}
-                                  disabled={deletingId === q.id}
+                                  disabled={deletingId === q.id || editingId === q.id}
                                   title="Delete quiz"
                                 >
                                   <Icon.Trash className="h-4 w-4" />
@@ -518,21 +623,66 @@ export default function ManageQuiz() {
                         </div>
                       </div>
 
+                      {editingId === q.id && (
+                        <div className="mt-3 p-3 bg-slate-50 rounded-2xl space-y-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-slate-600 w-12">Start:</label>
+                            <input
+                              type="datetime-local"
+                              value={editingDates.start_time || ""}
+                              onChange={(e) => handleDateChange('start_time', e.target.value)}
+                              className="flex-1 text-xs px-2 py-1 border rounded"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-slate-600 w-12">End:</label>
+                            <input
+                              type="datetime-local"
+                              value={editingDates.end_time || ""}
+                              onChange={(e) => handleDateChange('end_time', e.target.value)}
+                              className="flex-1 text-xs px-2 py-1 border rounded"
+                            />
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => saveDateChanges(q.id)}
+                              className="flex-1 text-xs px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              className="flex-1 text-xs px-3 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="mt-3 flex items-center justify-between">
                         <Badge tone={q?.is_published ? "green" : "amber"}>
                           {q?.is_published ? "Published" : "Draft"}
                         </Badge>
                         <div className="flex items-center gap-2">
+                          {editingId !== q.id && (
+                            <button
+                              onClick={() => startEditing(q)}
+                              className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded"
+                            >
+                              Edit Dates
+                            </button>
+                          )}
                           <Switch
                             checked={!!q?.is_published}
                             onChange={() => handleTogglePublish(q)}
-                            disabled={togglingId === q.id}
+                            disabled={togglingId === q.id || editingId === q.id}
                             ariaLabel="Toggle publish"
                           />
                           <button
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
                             onClick={() => handleDelete(q.id)}
-                            disabled={deletingId === q.id}
+                            disabled={deletingId === q.id || editingId === q.id}
                             title="Delete quiz"
                           >
                             <Icon.Trash className="h-4 w-4" />
@@ -547,8 +697,7 @@ export default function ManageQuiz() {
             </section>
 
             <p className="text-xs text-slate-500 mt-6">
-              Tip: The “Invalid value” fetch error happens when a header (e.g., Authorization) isn’t a string.
-              This component resolves the token safely and only sets the header when valid.
+              Tip: Click "Edit dates" to modify quiz start and end times. Changes are saved immediately.
             </p>
           </div>
         </main>

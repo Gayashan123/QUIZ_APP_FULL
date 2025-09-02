@@ -15,16 +15,13 @@ class QuizController extends Controller
     /**
      * Display all quizzes
      */
-    public function index()
-    {
-        // Eager load subject and teacher names
-        $quizzes = Quiz::with(['subject', 'teacher'])->orderBy('created_at', 'DESC')->get();
-
-        return response()->json([
-            'status' => true,
-            'data' => $quizzes
-        ], 200);
-    }
+   // In QuizController.php
+public function index(Request $request)
+{
+    $teacher = $request->user(); // get logged-in teacher from token
+    $quizzes = Quiz::where('teacher_id', $teacher->id)->get();
+    return response()->json($quizzes);
+}
 
     /**
      * Store a new quiz

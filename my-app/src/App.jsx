@@ -32,6 +32,8 @@ import RequireAuth from "./pages/RequireAuth";
 
 
 import StudentQuiz from "./Student/pages/ManageStude";//Student quiz page 
+import QuizPage1 from "./Student/pages/QuizAttemptPage"
+import QuizAttemptPage from "./Student/pages/QuizAttemptPage";
 
 
 function App() {
@@ -140,7 +142,15 @@ function App() {
           <RequireAuth>
            <StudentQuiz />
           </RequireAuth>
+          
 } />
+
+
+ <Route path="/studentquiz" element={<QuizPage1/>} />
+  <Route path="/quiz/:quizId/attempt" element={<QuizAttemptPage />} />
+
+
+
 
 
 

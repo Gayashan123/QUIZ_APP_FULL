@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import { apiurl } from "../../Admin/common/Http";
 import Sidebar from "../component/Sidebar";
 
-const normalizeBase = (base) => base?.replace(/\/?$/, "/") || "/";
-const API_BASE = `${normalizeBase(apiurl)}quizzes`;
+/* ---------------- Helpers ---------------- */
+const normalizeBase = (base) => (typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/");
+const API_ROOT = normalizeBase(apiurl);
+const API_BASE = `${API_ROOT}quizzes`;
 
 const resolveToken = () => {
   try {
-    const userInfo = localStorage.getItem("userInfo");
-    if (userInfo) {
-      const parsed = JSON.parse(userInfo);
-      return parsed.token || "";
-    }
-    return "";
+    const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+    return userInfo?.token || "";
   } catch {
     return "";
   }
@@ -35,30 +34,23 @@ const fetchJSON = async (url, opts = {}) => {
     try {
       const err = await res.json();
       message = err?.message || err?.error || JSON.stringify(err);
-    } catch {
-      // ignore
-    }
+    } catch {}
     throw new Error(message);
   }
   return res.json();
 };
 
 const parseDate = (v) => (v ? new Date(v) : null);
-const fmt = (d) => {
-  if (!d) return "-";
-  try {
-    const date = typeof d === "string" ? new Date(d) : d;
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  } catch {
-    return String(d);
-  }
-};
+const fmt = (d) =>
+  d
+    ? new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(typeof d === "string" ? new Date(d) : d)
+    : "-";
 
 const statusOf = (quiz, now = new Date()) => {
   const start = parseDate(quiz?.start_time);
@@ -69,6 +61,7 @@ const statusOf = (quiz, now = new Date()) => {
   return "unknown";
 };
 
+/* ---------------- Component ---------------- */
 export default function StudentQuiz() {
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -76,16 +69,7 @@ export default function StudentQuiz() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const studentName = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("userInfo");
-      if (raw) {
-        const obj = JSON.parse(raw);
-        return obj?.name || obj?.user?.name || "Student";
-      }
-    } catch {}
-    return "Student";
-  }, []);
+  const navigate = useNavigate();
 
   const load = async () => {
     setLoading(true);
@@ -107,67 +91,60 @@ export default function StudentQuiz() {
     load();
   }, []);
 
-  const handleAttempt = (quizId) => {
-    // Navigate to quiz attempt page
-    window.location.href = `/quiz/${quizId}/attempt`;
+  const handleAttempt = (quiz) => {
+    if (!quiz?.id) {
+      toast.error("Quiz ID missing!");
+      return;
+    }
+    navigate(`/quiz/${quiz.id}/attempt`);
   };
 
   const now = useMemo(() => new Date(), [quizzes]);
 
   const filteredQuizzes = useMemo(() => {
-    const matchesStatus = (q) => {
-      if (statusFilter === "all") return true;
-      return statusOf(q, now) === statusFilter;
-    };
-
-    const matchesSearch = (q) => {
-      if (!search) return true;
-      const s = search.toLowerCase();
-      return (
-        q?.title?.toLowerCase().includes(s) ||
-        q?.subject?.toLowerCase().includes(s) ||
-        q?.code?.toLowerCase().includes(s)
-      );
-    };
-
     return quizzes
-      .filter(matchesStatus)
-      .filter(matchesSearch)
-      .sort((a, b) => {
-        const aTime = parseDate(a.start_time)?.getTime() || 0;
-        const bTime = parseDate(b.start_time)?.getTime() || 0;
-        return bTime - aTime;
-      });
+      .filter((q) => {
+        if (statusFilter === "all") return true;
+        return statusOf(q, now) === statusFilter;
+      })
+      .filter((q) => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return (
+          q?.quiz_title?.toLowerCase().includes(s) ||
+          q?.subject?.name?.toLowerCase().includes(s)
+        );
+      })
+      .sort(
+        (a, b) =>
+          (parseDate(b.start_time)?.getTime() || 0) -
+          (parseDate(a.start_time)?.getTime() || 0)
+      );
   }, [quizzes, search, statusFilter, now]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       <div className="flex">
         <Sidebar />
-        
         <main className="flex-1">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <header className="mb-8">
-              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                <div>
-                  <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                    Available Quizzes
-                  </h1>
-                  <p className="text-slate-600">
-                    Browse and attempt quizzes assigned to you
-                  </p>
-                </div>
-                <button
-                  onClick={load}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition"
-                  disabled={loading}
-                >
-                  <Icon.Refresh className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                  <span className="text-sm font-medium">
-                    {loading ? "Refreshing…" : "Refresh"}
-                  </span>
-                </button>
+            <header className="mb-8 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                  Available Quizzes
+                </h1>
+                <p className="text-slate-600">Browse and attempt quizzes assigned to you</p>
               </div>
+              <button
+                onClick={load}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition"
+                disabled={loading}
+              >
+                <Icon.Refresh className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                <span className="text-sm font-medium">
+                  {loading ? "Refreshing…" : "Refresh"}
+                </span>
+              </button>
             </header>
 
             <section className="mb-6 grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -180,7 +157,6 @@ export default function StudentQuiz() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-
               <div className="md:col-span-3">
                 <Segmented
                   label="Status"
@@ -213,11 +189,11 @@ export default function StudentQuiz() {
                 </div>
               ) : (
                 filteredQuizzes.map((quiz) => (
-                  <QuizCard 
-                    key={quiz.id} 
-                    quiz={quiz} 
-                    now={now} 
-                    onAttempt={handleAttempt} 
+                  <Card
+                    key={quiz.id}
+                    quiz={quiz}
+                    now={now}
+                    onAttempt={() => handleAttempt(quiz)}
                   />
                 ))
               )}
@@ -229,10 +205,11 @@ export default function StudentQuiz() {
   );
 }
 
-function QuizCard({ quiz, now, onAttempt }) {
+function Card({ quiz, now, onAttempt }) {
   const status = statusOf(quiz, now);
   const isAttempted = quiz.attempt_status === "completed";
-  const score = quiz.score !== undefined ? `${quiz.score}/${quiz.total_marks}` : "Not graded";
+  const score =
+    quiz.score !== undefined ? `${quiz.score}/${quiz.total_marks}` : "Not graded";
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white/80 backdrop-blur p-6 shadow-sm hover:shadow-md transition">
@@ -241,9 +218,7 @@ function QuizCard({ quiz, now, onAttempt }) {
           <h3 className="text-lg font-semibold text-slate-900">
             {quiz.quiz_title}
           </h3>
-          <p className="text-sm text-slate-600">
-            {quiz.subject?.name}
-          </p>
+          <p className="text-sm text-slate-600">{quiz.subject?.name || "-"}</p>
         </div>
         <Badge status={status} />
       </div>
@@ -253,9 +228,8 @@ function QuizCard({ quiz, now, onAttempt }) {
           <span className="text-slate-500">Duration:</span>
           <span className="font-medium">{quiz.time_limit} minutes</span>
         </div>
-       
         <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Marks:</span>
+          <span className="text-slate-500">Passing Score:</span>
           <span className="font-medium">{quiz.passing_score}</span>
         </div>
         {isAttempted && (
@@ -272,7 +246,7 @@ function QuizCard({ quiz, now, onAttempt }) {
       </div>
 
       <button
-        onClick={() => onAttempt(quiz.id)}
+        onClick={onAttempt}
         disabled={status !== "ongoing" || isAttempted}
         className={`w-full py-2 rounded-xl font-medium transition ${
           status === "ongoing" && !isAttempted
@@ -280,7 +254,13 @@ function QuizCard({ quiz, now, onAttempt }) {
             : "bg-slate-100 text-slate-400 cursor-not-allowed"
         }`}
       >
-        {isAttempted ? "Attempted" : status === "ongoing" ? "Attempt Quiz" : status === "upcoming" ? "Not Started" : "Expired"}
+        {isAttempted
+          ? "Attempted"
+          : status === "ongoing"
+          ? "Attempt Quiz"
+          : status === "upcoming"
+          ? "Not Started"
+          : "Expired"}
       </button>
     </div>
   );
@@ -291,11 +271,9 @@ function Badge({ status }) {
     ongoing: { label: "Active", color: "bg-green-100 text-green-800 border-green-200" },
     upcoming: { label: "Upcoming", color: "bg-blue-100 text-blue-800 border-blue-200" },
     past: { label: "Completed", color: "bg-gray-100 text-gray-800 border-gray-200" },
-    unknown: { label: "Unknown", color: "bg-gray-100 text-gray-800 border-gray-200" }
+    unknown: { label: "Unknown", color: "bg-gray-100 text-gray-800 border-gray-200" },
   };
-
   const config = statusConfig[status] || statusConfig.unknown;
-
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full border text-xs font-medium ${config.color}`}>
       {config.label}
@@ -356,4 +334,3 @@ function SkeletonCard() {
     </div>
   );
 }
-
