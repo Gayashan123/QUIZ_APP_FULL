@@ -1,7 +1,6 @@
 import React, { useContext, useMemo, useState } from "react";
 import {
   FiBarChart2,
-  FiBook,
   FiUsers,
   FiSettings,
   FiMenu,
@@ -9,26 +8,26 @@ import {
   FiLogOut,
 } from "react-icons/fi";
 import { FaChartBar } from "react-icons/fa";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/Auth";
 import NavItem from "./NavItem";
 
-export default function Sidebar({ teacherName = "Teacher" }) {
+export default function Sidebar({ studentName = "Student" }) {
   const navigate = useNavigate();
   const { logout } = useContext(AuthContext);
 
-  const [collapsed, setCollapsed] = useState(false); // desktop collapse
-  const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const initials = useMemo(() => {
-    if (!teacherName) return "T";
-    return teacherName
+    if (!studentName) return "S";
+    return studentName
       .split(" ")
       .filter(Boolean)
       .map((n) => n[0]?.toUpperCase())
       .slice(0, 2)
       .join("");
-  }, [teacherName]);
+  }, [studentName]);
 
   const handleLogout = async () => {
     try {
@@ -52,22 +51,18 @@ export default function Sidebar({ teacherName = "Teacher" }) {
     }
   };
 
+  // 👇 student-only navigation
   const nav = [
-    { key: "dashboard", label: "Dashboard", to: "/home", icon: <FiBarChart2 />, tone: "indigo" },
-
-    { key: "students", label: "Quizzes", to: "/manage", icon: <FiUsers />, tone: "emerald" },
-    { key: "analytics", label: "Analytics", to: "/view", icon: <FaChartBar />, tone: "violet" },
-    { key: "settings", label: "Settings", to: "/settings", icon: <FiSettings />, tone: "slate" },
-    // Logout is a button (no NavLink)
+    { key: "dashboard", label: "Dashboard", to: "/student", icon: <FiBarChart2 />, tone: "indigo" },
+    { key: "quizzes", label: "Quizzes", to: "/studentquiz", icon: <FiUsers />, tone: "emerald" },
+    { key: "analytics", label: "Analytics", to: "/student/analytics", icon: <FaChartBar />, tone: "violet" },
+    { key: "settings", label: "Settings", to: "/student/settings", icon: <FiSettings />, tone: "slate" },
     { key: "logout", label: "Logout", icon: <FiLogOut />, tone: "rose", onClick: handleLogout },
   ];
 
   const Brand = (
     <div className="flex items-center gap-3">
-      <div
-        className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold"
-        aria-hidden
-      >
+      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold">
         JQ
       </div>
       {!collapsed && (
@@ -89,7 +84,7 @@ export default function Sidebar({ teacherName = "Teacher" }) {
         </div>
         {!collapsed && (
           <div>
-            <p className="font-medium truncate max-w-[10rem]">{teacherName}</p>
+            <p className="font-medium truncate max-w-[10rem]">{studentName}</p>
             <p className="text-xs text-slate-500">Student</p>
           </div>
         )}
@@ -97,7 +92,7 @@ export default function Sidebar({ teacherName = "Teacher" }) {
     </div>
   );
 
-  // Desktop Sidebar
+  // desktop
   const Desktop = (
     <aside
       className={`hidden md:flex flex-col ${
@@ -109,7 +104,6 @@ export default function Sidebar({ teacherName = "Teacher" }) {
         <button
           className="hidden md:inline-flex p-2 rounded-xl hover:bg-slate-100 transition"
           onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? "Expand" : "Collapse"}
         >
           <FiMenu />
         </button>
@@ -146,39 +140,31 @@ export default function Sidebar({ teacherName = "Teacher" }) {
     </aside>
   );
 
-  // Mobile button (floating)
+  // mobile toggle
   const MobileToggle = (
     <div className="md:hidden fixed top-4 right-4 z-50">
       <button
         onClick={() => setMobileOpen(true)}
-        className="p-2 rounded-xl bg-indigo-600 text-white shadow-lg active:scale-95 transition"
-        aria-label="Open menu"
+        className="p-2 rounded-xl bg-indigo-600 text-white shadow-lg"
       >
         <FiMenu size={22} />
       </button>
     </div>
   );
 
-  // Mobile Drawer
+  // mobile drawer
   const Mobile = (
     <div className={`md:hidden ${mobileOpen ? "block" : "hidden"}`}>
-      <div
-        className="fixed inset-0 z-40 bg-black/50"
-        onClick={() => setMobileOpen(false)}
-        aria-hidden
-      />
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
       <div
         className={`fixed left-0 top-0 bottom-0 z-50 w-4/5 max-w-sm bg-white shadow-2xl p-5 flex flex-col
         transform transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
-        role="dialog"
-        aria-modal="true"
       >
         <div className="flex items-center justify-between mb-6">
           {Brand}
           <button
             onClick={() => setMobileOpen(false)}
             className="p-2 rounded-xl hover:bg-slate-100 transition"
-            aria-label="Close menu"
           >
             <FiX size={22} />
           </button>
@@ -197,12 +183,7 @@ export default function Sidebar({ teacherName = "Teacher" }) {
                 {item.label}
               </NavItem>
             ) : (
-              <NavItem
-                key={item.key}
-                icon={item.icon}
-                tone={item.tone}
-                onClick={item.onClick}
-              >
+              <NavItem key={item.key} icon={item.icon} tone={item.tone} onClick={item.onClick}>
                 {item.label}
               </NavItem>
             )

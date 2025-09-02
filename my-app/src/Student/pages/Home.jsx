@@ -13,7 +13,7 @@ import {
   FaBars,
   FaTimes
 } from "react-icons/fa";
-import Sidebar from "../component/Sidebar";
+import Sidebar from "../../Student/component/Sidebar";
 
 const studentData = {
   studentName: "Alex Johnson",

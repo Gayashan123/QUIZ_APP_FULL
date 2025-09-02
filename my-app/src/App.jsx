@@ -30,6 +30,10 @@ import CreateFu from "./Admin/pages/CreateFaculty";
 import CreateSu from "./Admin/pages/CreateSubject";
 import RequireAuth from "./pages/RequireAuth";
 
+
+import StudentQuiz from "./Student/pages/ManageStude";//Student quiz page 
+
+
 function App() {
   return (
     <Router>
@@ -125,13 +129,22 @@ function App() {
         />
 
         {/* Student route */}
-        <Route path="/student" element={
+        
+       <Route path="/student" element={
           <RequireAuth>
            <Student />
-          
           </RequireAuth>
-      
-          } />
+} />
+
+ <Route path="/studentquiz" element={
+          <RequireAuth>
+           <StudentQuiz />
+          </RequireAuth>
+} />
+
+
+
+
 
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" />} />

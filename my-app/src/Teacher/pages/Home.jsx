@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useContext, useMemo } from "react";
 import Sidebar from "../components/Sidebar";
 import TopNav from "../components/TopNav";
 import StatCard from "../components/StatCard";
@@ -22,7 +22,6 @@ const resolveToken = () => {
   } catch (error) {
     console.error("Error resolving token:", error);
   }
-  
   try {
     const ls = localStorage.getItem("authToken");
     return typeof ls === "string" ? ls : "";
@@ -65,26 +64,26 @@ const statusOf = (q, now = new Date()) => {
   return "unknown";
 };
 
-/* ---------------- Sub-Components ---------------- */
+/* ---------------- UI Sections ---------------- */
 const DashboardStats = ({ totalQuizzes, upcomingQuizzes, totalStudents, loading }) => (
   <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <StatCard 
-      title="Total Quizzes" 
-      value={loading ? "-" : totalQuizzes} 
-      change={loading ? "…" : ""} 
-      icon="clipboard" 
+    <StatCard
+      title="Total Quizzes"
+      value={loading ? "-" : totalQuizzes}
+      change={loading ? "…" : ""}
+      icon="clipboard"
     />
-    <StatCard 
-      title="Active Students" 
-      value={loading ? "-" : totalStudents} 
-      change="" 
-      icon="students" 
+    <StatCard
+      title="Active Students"
+      value={loading ? "-" : totalStudents}
+      change=""
+      icon="students"
     />
-    <StatCard 
-      title="Upcoming Quizzes" 
-      value={loading ? "-" : upcomingQuizzes} 
-      change="" 
-      icon="calendar" 
+    <StatCard
+      title="Upcoming Quizzes"
+      value={loading ? "-" : upcomingQuizzes}
+      change=""
+      icon="calendar"
     />
   </section>
 );
@@ -93,7 +92,9 @@ const QuickActionsPanel = () => (
   <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
     <div className="flex justify-between items-center mb-6">
       <h2 className="text-xl font-semibold">Quick Actions</h2>
-      <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">View all</button>
+      <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+        View all
+      </button>
     </div>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <ActionButton type="createQuiz" />
@@ -109,17 +110,27 @@ const PerformancePanel = ({ stats, loading }) => (
     <h2 className="text-xl font-semibold mb-6">Class Performance</h2>
     {loading ? (
       <div className="space-y-6">
-        <div className="animate-pulse h-4 bg-slate-200 rounded w-3/4"></div>
-        <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2"></div>
+        <div className="animate-pulse h-4 bg-slate-200 rounded w-3/4" />
+        <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2" />
         <div className="pt-4 border-t border-slate-200">
-          <div className="animate-pulse h-4 bg-slate-200 rounded w-2/3 mb-2"></div>
-          <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2"></div>
+          <div className="animate-pulse h-4 bg-slate-200 rounded w-2/3 mb-2" />
+          <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2" />
         </div>
       </div>
     ) : (
       <>
-        <PerformanceMetric label="Average Score" value={`${stats.averageScore}%`} progress={stats.averageScore} color="bg-indigo-600" />
-        <PerformanceMetric label="Completion Rate" value={`${stats.completionRate}%`} progress={stats.completionRate} color="bg-emerald-600" />
+        <PerformanceMetric
+          label="Average Score"
+          value={`${stats.averageScore}%`}
+          progress={stats.averageScore}
+          color="bg-indigo-600"
+        />
+        <PerformanceMetric
+          label="Completion Rate"
+          value={`${stats.completionRate}%`}
+          progress={stats.completionRate}
+          color="bg-emerald-600"
+        />
         <div className="pt-4 border-t border-slate-200">
           <p className="text-sm text-slate-600 mb-1">Top Performing Quiz</p>
           <p className="font-medium">{stats.topPerformingQuiz}</p>
@@ -132,14 +143,15 @@ const PerformancePanel = ({ stats, loading }) => (
 const RecentQuizzesPanel = ({ quizzes, loading }) => (
   <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
     <h2 className="text-xl font-semibold mb-6">Recent Quizzes</h2>
-    {loading
-      ? Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
-        ))
-      : quizzes.length > 0 
-        ? quizzes.map((quiz, idx) => <QuizCard key={quiz.id || idx} quiz={quiz} />)
-        : <p className="text-sm text-slate-600">No quizzes found.</p>
-    }
+    {loading ? (
+      Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
+      ))
+    ) : quizzes.length > 0 ? (
+      quizzes.map((quiz, idx) => <QuizCard key={quiz.id || idx} quiz={quiz} />)
+    ) : (
+      <p className="text-sm text-slate-600">No quizzes found.</p>
+    )}
   </div>
 );
 
@@ -161,20 +173,21 @@ const NotificationsPanel = ({ notifications, loading }) => (
 /* ---------------- Main Component ---------------- */
 export default function TeacherHome() {
   const { user, login } = useContext(AuthContext);
+
+  // Greeting name
   const [teacherName, setTeacherName] = useState(user?.name || "Teacher");
+
+  // Data state
   const [quizzes, setQuizzes] = useState([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
   const [totalStudents, setTotalStudents] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
 
+  // Derived
   const initials = useMemo(() => {
-    return teacherName
-      .split(" ")
-      .filter(Boolean)
-      .map((n) => n[0]?.toUpperCase())
-      .slice(0, 2)
-      .join("") || "T";
+    const parts = (teacherName || "").split(" ").filter(Boolean);
+    return parts.length ? parts.map((p) => p[0]?.toUpperCase()).slice(0, 2).join("") : "T";
   }, [teacherName]);
 
   const greeting = useMemo(() => {
@@ -182,7 +195,6 @@ export default function TeacherHome() {
     return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   }, []);
 
-  // ---------------- Derived values using useMemo ----------------
   const totalQuizzes = useMemo(() => quizzes.length, [quizzes]);
 
   const upcomingQuizzes = useMemo(() => {
@@ -191,111 +203,163 @@ export default function TeacherHome() {
   }, [quizzes]);
 
   const performanceStats = useMemo(() => {
-    const avgScores = quizzes.map((q) => Number(q.average_score)).filter(Number.isFinite);
-    const completionRates = quizzes.map((q) => Number(q.completion_rate)).filter(Number.isFinite);
+    const avgScores = quizzes
+      .map((q) => Number(q.average_score))
+      .filter(Number.isFinite);
+    const completionRates = quizzes
+      .map((q) => Number(q.completion_rate))
+      .filter(Number.isFinite);
 
-    const averageScore = avgScores.length ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length) : 0;
-    const completionRate = completionRates.length ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length) : 0;
+    const averageScore = avgScores.length
+      ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length)
+      : 0;
+    const completionRate = completionRates.length
+      ? Math.round(
+          completionRates.reduce((a, b) => a + b, 0) / completionRates.length
+        )
+      : 0;
 
-    const topQuiz = [...quizzes]
-      .filter((q) => Number.isFinite(Number(q.average_score)))
-      .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] || null;
+    const topQuiz =
+      [...quizzes]
+        .filter((q) => Number.isFinite(Number(q.average_score)))
+        .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] ||
+      null;
 
     return {
       averageScore,
       completionRate,
-      topPerformingQuiz: topQuiz?.name || topQuiz?.quiz_title || topQuiz?.title || "N/A",
+      topPerformingQuiz:
+        topQuiz?.name || topQuiz?.quiz_title || topQuiz?.title || "N/A",
     };
   }, [quizzes]);
 
   const recentQuizzes = useMemo(() => {
     const sorted = [...quizzes].sort((a, b) => {
-      const A = parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() || 0;
-      const B = parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() || 0;
+      const A =
+        parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() ||
+        0;
+      const B =
+        parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() ||
+        0;
       return B - A;
     });
     return sorted.slice(0, 5);
   }, [quizzes]);
 
-  // ---------------- Load teacher info ----------------
-  const loadTeacherInfo = useCallback(async () => {
-    try {
-      const userInfoStr = localStorage.getItem("userInfo");
-      if (userInfoStr) {
-        const userInfo = JSON.parse(userInfoStr);
-        if (userInfo?.name?.trim()) {
-          setTeacherName(userInfo.name.trim());
-          return;
-        }
-      }
-
-      const data = await fetchJSON(`${API_ROOT}checkauth`);
-      const nameFromApi = data?.teacher?.name || data?.data?.name || data?.user?.name || data?.name || null;
-      if (nameFromApi) {
-        setTeacherName(nameFromApi);
-        const updatedUser = { ...user, name: nameFromApi };
-        login(updatedUser);
-        localStorage.setItem("userInfo", JSON.stringify(updatedUser));
-      }
-    } catch (error) {
-      console.error("Error loading teacher info:", error);
-    }
-  }, [login, user]);
-
-  // ---------------- Load quizzes ----------------
-  const loadQuizzes = useCallback(async () => {
-    setLoadingQuizzes(true);
-    try {
-      const data = await fetchJSON(`${API_ROOT}quizzes`);
-      setQuizzes(Array.isArray(data) ? data : data?.data || []);
-    } catch (err) {
-      console.error("Error fetching quizzes:", err);
-    } finally {
-      setLoadingQuizzes(false);
-    }
-  }, []);
-
-  // ---------------- Load notifications ----------------
-  const loadNotifications = useCallback(async () => {
-    setLoadingNotifications(true);
-    try {
-      const mockNotifications = [
-        { id: 1, message: "Quiz 'Math Test' has been graded", time: "2 hours ago" },
-        { id: 2, message: "New student registered for your class", time: "1 day ago" },
-        { id: 3, message: "Reminder: Physics quiz starts tomorrow", time: "2 days ago" },
-      ];
-      setNotifications(mockNotifications);
-    } catch (err) {
-      console.error("Error fetching notifications:", err);
-    } finally {
-      setLoadingNotifications(false);
-    }
-  }, []);
-
-  // ---------------- Load student count ----------------
-  const loadStudentCount = useCallback(async () => {
-    setTotalStudents(42); // replace with API call if needed
-  }, []);
-
-  // ---------------- Initial data load ----------------
+  /* -------- Load teacher info -------- */
   useEffect(() => {
+    const loadTeacherInfo = async () => {
+      // 1) From localStorage (fast path)
+      try {
+        const userInfoStr = localStorage.getItem("userInfo");
+        if (userInfoStr) {
+          const userInfo = JSON.parse(userInfoStr);
+          const nameLS =
+            userInfo?.name ||
+            userInfo?.user?.name ||
+            [userInfo?.first_name, userInfo?.last_name]
+              .filter(Boolean)
+              .join(" ");
+          if (nameLS?.trim()) {
+            setTeacherName(nameLS.trim());
+            return;
+          }
+        }
+      } catch {
+        // ignore and continue to API
+      }
+
+      // 2) From /checkauth
+      try {
+        const tk = resolveToken();
+        if (!tk) return;
+        const data = await fetchJSON(`${API_ROOT}checkauth`);
+        const nameFromApi =
+          data?.teacher?.name || data?.data?.name || data?.user?.name || data?.name || null;
+        if (nameFromApi) {
+          setTeacherName(nameFromApi);
+          const updatedUser = { ...(user || {}), name: nameFromApi };
+          // login expects an object; not a function
+          login(updatedUser);
+          localStorage.setItem("userInfo", JSON.stringify(updatedUser));
+        }
+      } catch (error) {
+        console.error("Error loading teacher info:", error);
+      }
+    };
     loadTeacherInfo();
-    loadQuizzes();
-    loadNotifications();
-    loadStudentCount();
-  }, [loadTeacherInfo, loadQuizzes, loadNotifications, loadStudentCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
+
+  /* -------- Load quizzes -------- */
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoadingQuizzes(true);
+      try {
+        const token = resolveToken();
+        if (!token) return;
+
+        const data = await fetchJSON(`${API_ROOT}quizzes`);
+        if (!mounted) return;
+
+        const list = Array.isArray(data) ? data : data?.data || [];
+        setQuizzes(list);
+      } catch (err) {
+        console.error("Error fetching quizzes:", err);
+      } finally {
+        if (mounted) setLoadingQuizzes(false);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /* -------- Load notifications (placeholder) -------- */
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoadingNotifications(true);
+      try {
+        const mockNotifications = [
+          { id: 1, message: "Quiz 'Math Test' has been graded", time: "2 hours ago" },
+          { id: 2, message: "New student registered for your class", time: "1 day ago" },
+          { id: 3, message: "Reminder: Physics quiz starts tomorrow", time: "2 days ago" },
+        ];
+        if (mounted) setNotifications(mockNotifications);
+      } catch (err) {
+        console.error("Error fetching notifications:", err);
+      } finally {
+        if (mounted) setLoadingNotifications(false);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /* -------- Load students (placeholder) -------- */
+  useEffect(() => {
+    // Replace with real API call
+    setTotalStudents(42);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 font-sans text-slate-800 flex">
       <Sidebar teacherName={teacherName} initials={initials} />
       <main className="flex-1 overflow-auto">
-      
+        <TopNav notifications={notifications} />
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
           <section className="mb-8">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
               {greeting}, {teacherName}
             </h1>
-            <p className="text-slate-600 mt-1">Here's what's happening with your quizzes today.</p>
+            <p className="text-slate-600 mt-1">
+              Here's what's happening with your quizzes today.
+            </p>
           </section>
 
           <DashboardStats
@@ -312,7 +376,10 @@ export default function TeacherHome() {
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <RecentQuizzesPanel quizzes={recentQuizzes} loading={loadingQuizzes} />
-            <NotificationsPanel notifications={notifications} loading={loadingNotifications} />
+            <NotificationsPanel
+              notifications={notifications}
+              loading={loadingNotifications}
+            />
           </section>
         </div>
       </main>
