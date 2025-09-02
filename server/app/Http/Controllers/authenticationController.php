@@ -60,4 +60,30 @@ return response()->json([
 
 
     }
+
+
+  public function checkAuth(Request $request)
+    {
+        $admin = Auth::guard('user')->user(); // explicitly use admin guard
+
+        if (!$admin) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unauthenticated'
+            ], 401);
+        }
+
+        return response()->json([
+            'status' => true,
+            'admin' => [
+                'id' => $admin->id,
+                'name' => $admin->name,
+                'email' => $admin->email,
+            ],
+        ]);
+    }
+
+
+
+
 }

@@ -25,6 +25,11 @@ return [
             'provider' => 'teachers',
         ],
 
+        'user' => [
+            'driver' => 'sanctum', // token-based
+            'provider' => 'users',
+        ],
+
     ],
 
     'providers' => [

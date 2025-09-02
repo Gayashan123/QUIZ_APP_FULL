@@ -125,7 +125,13 @@ function App() {
         />
 
         {/* Student route */}
-        <Route path="/student" element={<Student />} />
+        <Route path="/student" element={
+          <RequireAuth>
+           <Student />
+          
+          </RequireAuth>
+      
+          } />
 
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" />} />

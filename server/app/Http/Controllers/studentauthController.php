@@ -6,6 +6,7 @@ use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class StudentAuthController extends Controller
 {
@@ -51,4 +52,29 @@ class StudentAuthController extends Controller
             'message' => 'Logged out successfully.',
         ]);
     }
+
+
+  public function checkAuth(Request $request)
+    {
+        $student = Auth::guard('student')->user(); // explicitly use admin guard
+
+        if (!$student) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Unauthenticated'
+            ], 401);
+        }
+
+        return response()->json([
+            'status' => true,
+            'student' => [
+                'id' => $student->id,
+                'name' => $student->name,
+                'email' => $student->email,
+            ],
+        ]);
+    }
+
+
+
 }

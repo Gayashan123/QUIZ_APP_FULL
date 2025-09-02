@@ -10,7 +10,6 @@ export const AuthProvider = ({ children }) => {
     try {
       return stored ? JSON.parse(stored) : null;
     } catch {
-      // if invalid JSON was stored, clear it
       localStorage.removeItem("userInfo");
       return null;
     }
@@ -18,36 +17,40 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (!user?.token) return;
+      if (!user?.token || !user?.type) return;
+
+      let endpoint = "";
+      if (user.type === "teacher") endpoint = "checkauth";
+      if (user.type === "admin") endpoint = "adcheckauth";
+      if (user.type === "student") endpoint = "stcheckauth";
+
       try {
-        const res = await axios.get(`${apiurl}checkauth`, {
+        const res = await axios.get(`${apiurl}${endpoint}`, {
           headers: { Authorization: `Bearer ${user.token}` },
         });
-        // Extract teacher_id robustly from response
+
         const data = res?.data ?? {};
-        const teacherId =
-          data?.teacher_id ??
-          data?.data?.teacher_id ??
-          data?.user?.teacher_id ??
-          data?.user?.id ??
+        let id =
+          data?.teacher?.id ??
+          data?.admin?.id ??
+          data?.student?.id ??
           data?.id ??
           null;
 
-        if (teacherId) {
-          const nextUser = { ...user, teacher_id: Number(teacherId) };
+        if (id) {
+          const nextUser = { ...user, id: Number(id) };
           setUser(nextUser);
           localStorage.setItem("userInfo", JSON.stringify(nextUser));
         }
       } catch (err) {
         console.error("checkauth failed:", err?.response?.data || err?.message);
-        // if token invalid, logout
         setUser(null);
         localStorage.removeItem("userInfo");
       }
     };
 
     checkAuth();
-  }, [user?.token]); // only when token changes
+  }, [user?.token, user?.type]);
 
   const login = (userData) => {
     setUser(userData);

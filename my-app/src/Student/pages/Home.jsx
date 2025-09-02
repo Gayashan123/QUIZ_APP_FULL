@@ -13,6 +13,7 @@ import {
   FaBars,
   FaTimes
 } from "react-icons/fa";
+import Sidebar from "../component/Sidebar";
 
 const studentData = {
   studentName: "Alex Johnson",
@@ -50,92 +51,10 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 flex">
+
+      <Sidebar />
       {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 p-3 rounded-lg bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition"
-      >
-        {isMobileMenuOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
-      </button>
-
-      {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 p-6 sticky top-0 h-screen">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-indigo-700">JuizQuiz</h1>
-          <p className="text-sm text-gray-500">Student Portal</p>
-        </div>
-
-        <nav className="flex flex-col gap-1 flex-1">
-          <StudentNavItem icon={<FaBookOpen />} active>Dashboard</StudentNavItem>
-          <StudentNavItem icon={<FaClock />}>Upcoming Quizzes</StudentNavItem>
-          <StudentNavItem icon={<FaCheckCircle />}>Completed Quizzes</StudentNavItem>
-          <StudentNavItem icon={<FaChartLine />}>Performance</StudentNavItem>
-          <StudentNavItem icon={<FaTrophy />}>Leaderboard</StudentNavItem>
-          <StudentNavItem icon={<FaQuestionCircle />}>Help Center</StudentNavItem>
-        </nav>
-
-        <div className="mt-auto pt-6 border-t border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-              {studentName.split(' ').map(n => n[0]).join('')}
-            </div>
-            <div>
-              <p className="font-medium">{studentName}</p>
-              <p className="text-xs text-gray-500">Student</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile Sidebar Overlay and Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden">
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
-            onClick={() => setIsMobileMenuOpen(false)}
-          ></div>
-          
-          {/* Mobile Sidebar Content */}
-          <div className="fixed inset-y-0 left-0 w-3/4 max-w-xs bg-white z-50 overflow-y-auto shadow-xl">
-            <div className="p-6">
-              <div className="mb-10 flex justify-between items-center">
-                <div>
-                  <h1 className="text-2xl font-bold text-indigo-700">JuizQuiz</h1>
-                  <p className="text-sm text-gray-500">Student Portal</p>
-                </div>
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2 text-gray-600 hover:text-gray-800"
-                >
-                  <FaTimes size={20} />
-                </button>
-              </div>
-
-              <nav className="flex flex-col gap-1 flex-1">
-                <StudentNavItem icon={<FaBookOpen />} active>Dashboard</StudentNavItem>
-                <StudentNavItem icon={<FaClock />}>Upcoming Quizzes</StudentNavItem>
-                <StudentNavItem icon={<FaCheckCircle />}>Completed Quizzes</StudentNavItem>
-                <StudentNavItem icon={<FaChartLine />}>Performance</StudentNavItem>
-                <StudentNavItem icon={<FaTrophy />}>Leaderboard</StudentNavItem>
-                <StudentNavItem icon={<FaQuestionCircle />}>Help Center</StudentNavItem>
-              </nav>
-
-              <div className="mt-auto pt-6 border-t border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-                    {studentName.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div>
-                    <p className="font-medium">{studentName}</p>
-                    <p className="text-xs text-gray-500">Student</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+     
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">

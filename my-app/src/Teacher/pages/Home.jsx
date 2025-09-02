@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useMemo } from "react";
+import React, { useEffect, useState, useContext, useMemo, useCallback } from "react";
 import Sidebar from "../components/Sidebar";
 import TopNav from "../components/TopNav";
 import StatCard from "../components/StatCard";
@@ -9,7 +9,7 @@ import NotificationItem from "../components/NotificationItem";
 import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
 import { AuthContext } from "../../context/Auth";
 
-/* ---------------- Helpers: API + formatting ---------------- */
+/* ---------------- Helpers ---------------- */
 const normalizeBase = (base) =>
   typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/";
 const API_ROOT = normalizeBase(apiurl);
@@ -19,9 +19,17 @@ const resolveToken = () => {
     const t = typeof tokenFromLS === "function" ? tokenFromLS() : tokenFromLS;
     if (typeof t === "string") return t;
     if (t && typeof t === "object" && typeof t.token === "string") return t.token;
-  } catch {}
-  const ls = localStorage.getItem("authToken");
-  return typeof ls === "string" ? ls : "";
+  } catch (error) {
+    console.error("Error resolving token:", error);
+  }
+  
+  try {
+    const ls = localStorage.getItem("authToken");
+    return typeof ls === "string" ? ls : "";
+  } catch (error) {
+    console.error("Error accessing localStorage:", error);
+    return "";
+  }
 };
 
 const makeHeaders = () => {
@@ -34,9 +42,17 @@ const makeHeaders = () => {
 };
 
 const fetchJSON = async (url, opts = {}) => {
-  const res = await fetch(url, { ...opts, headers: makeHeaders() });
-  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-  return res.status === 204 ? null : res.json();
+  try {
+    const res = await fetch(url, { ...opts, headers: makeHeaders() });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(errorText || `HTTP ${res.status}`);
+    }
+    return res.status === 204 ? null : res.json();
+  } catch (error) {
+    console.error(`API call failed for ${url}:`, error);
+    throw error;
+  }
 };
 
 const parseDate = (v) => (v ? new Date(v) : null);
@@ -49,11 +65,108 @@ const statusOf = (q, now = new Date()) => {
   return "unknown";
 };
 
-/* ---------------- Component ---------------- */
+/* ---------------- Sub-Components ---------------- */
+const DashboardStats = ({ totalQuizzes, upcomingQuizzes, totalStudents, loading }) => (
+  <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <StatCard 
+      title="Total Quizzes" 
+      value={loading ? "-" : totalQuizzes} 
+      change={loading ? "…" : ""} 
+      icon="clipboard" 
+    />
+    <StatCard 
+      title="Active Students" 
+      value={loading ? "-" : totalStudents} 
+      change="" 
+      icon="students" 
+    />
+    <StatCard 
+      title="Upcoming Quizzes" 
+      value={loading ? "-" : upcomingQuizzes} 
+      change="" 
+      icon="calendar" 
+    />
+  </section>
+);
+
+const QuickActionsPanel = () => (
+  <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
+    <div className="flex justify-between items-center mb-6">
+      <h2 className="text-xl font-semibold">Quick Actions</h2>
+      <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">View all</button>
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <ActionButton type="createQuiz" />
+      <ActionButton type="viewAnalytics" />
+      <ActionButton type="manageStudents" />
+      <ActionButton type="gradeSubmissions" />
+    </div>
+  </div>
+);
+
+const PerformancePanel = ({ stats, loading }) => (
+  <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
+    <h2 className="text-xl font-semibold mb-6">Class Performance</h2>
+    {loading ? (
+      <div className="space-y-6">
+        <div className="animate-pulse h-4 bg-slate-200 rounded w-3/4"></div>
+        <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2"></div>
+        <div className="pt-4 border-t border-slate-200">
+          <div className="animate-pulse h-4 bg-slate-200 rounded w-2/3 mb-2"></div>
+          <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2"></div>
+        </div>
+      </div>
+    ) : (
+      <>
+        <PerformanceMetric label="Average Score" value={`${stats.averageScore}%`} progress={stats.averageScore} color="bg-indigo-600" />
+        <PerformanceMetric label="Completion Rate" value={`${stats.completionRate}%`} progress={stats.completionRate} color="bg-emerald-600" />
+        <div className="pt-4 border-t border-slate-200">
+          <p className="text-sm text-slate-600 mb-1">Top Performing Quiz</p>
+          <p className="font-medium">{stats.topPerformingQuiz}</p>
+        </div>
+      </>
+    )}
+  </div>
+);
+
+const RecentQuizzesPanel = ({ quizzes, loading }) => (
+  <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
+    <h2 className="text-xl font-semibold mb-6">Recent Quizzes</h2>
+    {loading
+      ? Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
+        ))
+      : quizzes.length > 0 
+        ? quizzes.map((quiz, idx) => <QuizCard key={quiz.id || idx} quiz={quiz} />)
+        : <p className="text-sm text-slate-600">No quizzes found.</p>
+    }
+  </div>
+);
+
+const NotificationsPanel = ({ notifications, loading }) => (
+  <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
+    <h2 className="text-xl font-semibold mb-6">Notifications</h2>
+    {loading ? (
+      Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
+      ))
+    ) : notifications.length > 0 ? (
+      notifications.map((n) => <NotificationItem key={n.id} notification={n} />)
+    ) : (
+      <p className="text-sm text-slate-600">You're all caught up.</p>
+    )}
+  </div>
+);
+
+/* ---------------- Main Component ---------------- */
 export default function TeacherHome() {
   const { user, login } = useContext(AuthContext);
-
   const [teacherName, setTeacherName] = useState(user?.name || "Teacher");
+  const [quizzes, setQuizzes] = useState([]);
+  const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
 
   const initials = useMemo(() => {
     return teacherName
@@ -69,199 +182,137 @@ export default function TeacherHome() {
     return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   }, []);
 
-  // Dashboard data
-  const [totalQuizzes, setTotalQuizzes] = useState(0);
-  const [upcomingQuizzes, setUpcomingQuizzes] = useState(0);
-  const [recentQuizzes, setRecentQuizzes] = useState([]);
-  const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  // ---------------- Derived values using useMemo ----------------
+  const totalQuizzes = useMemo(() => quizzes.length, [quizzes]);
 
-  const [notifications, setNotifications] = useState([]);
-  const [totalStudents, setTotalStudents] = useState(0);
-  const [performanceStats, setPerformanceStats] = useState({
-    averageScore: 0,
-    completionRate: 0,
-    topPerformingQuiz: "N/A",
-  });
+  const upcomingQuizzes = useMemo(() => {
+    const now = new Date();
+    return quizzes.filter((q) => statusOf(q, now) === "upcoming").length;
+  }, [quizzes]);
 
-  // ------------------ Load teacher name ------------------
-  useEffect(() => {
-    const authToken = user?.token || resolveToken();
-    if (!authToken) return;
+  const performanceStats = useMemo(() => {
+    const avgScores = quizzes.map((q) => Number(q.average_score)).filter(Number.isFinite);
+    const completionRates = quizzes.map((q) => Number(q.completion_rate)).filter(Number.isFinite);
 
-    const persist = (next) => {
-      try {
-        const raw = localStorage.getItem("userInfo");
-        const prev = raw ? JSON.parse(raw) : {};
-        const merged = { ...prev, ...next };
-        localStorage.setItem("userInfo", JSON.stringify(merged));
-      } catch {}
-      login?.((prev) => (typeof prev === "object" ? { ...prev, ...next } : next));
-      if (next.name) setTeacherName(next.name);
+    const averageScore = avgScores.length ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length) : 0;
+    const completionRate = completionRates.length ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length) : 0;
+
+    const topQuiz = [...quizzes]
+      .filter((q) => Number.isFinite(Number(q.average_score)))
+      .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] || null;
+
+    return {
+      averageScore,
+      completionRate,
+      topPerformingQuiz: topQuiz?.name || topQuiz?.quiz_title || topQuiz?.title || "N/A",
     };
+  }, [quizzes]);
 
-    const loadTeacher = async () => {
-      let nameAcc = user?.name || null;
+  const recentQuizzes = useMemo(() => {
+    const sorted = [...quizzes].sort((a, b) => {
+      const A = parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() || 0;
+      const B = parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() || 0;
+      return B - A;
+    });
+    return sorted.slice(0, 5);
+  }, [quizzes]);
 
-      // Try localStorage first
-      try {
-        const raw = localStorage.getItem("userInfo");
-        if (raw) {
-          const obj = JSON.parse(raw);
-          if (!nameAcc) {
-            const n =
-              obj?.name ||
-              obj?.user?.name ||
-              [obj?.first_name, obj?.last_name].filter(Boolean).join(" ");
-            if (n && n.trim()) nameAcc = n.trim();
-          }
+  // ---------------- Load teacher info ----------------
+  const loadTeacherInfo = useCallback(async () => {
+    try {
+      const userInfoStr = localStorage.getItem("userInfo");
+      if (userInfoStr) {
+        const userInfo = JSON.parse(userInfoStr);
+        if (userInfo?.name?.trim()) {
+          setTeacherName(userInfo.name.trim());
+          return;
         }
-      } catch {}
-
-      // Try /checkauth API
-      if (!nameAcc) {
-        try {
-          const data = await fetchJSON(`${API_ROOT}checkauth`);
-          const nameFromApi =
-            data?.data?.name ||
-            data?.user?.name ||
-            data?.name ||
-            null;
-          if (nameFromApi) persist({ name: nameFromApi });
-        } catch (e) {
-          console.error("checkauth failed:", e);
-        }
-      } else {
-        setTeacherName(nameAcc);
       }
-    };
 
-    loadTeacher();
-  }, [user?.token, login]);
-
-  // ------------------ Fetch quizzes ------------------
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoadingQuizzes(true);
-      try {
-        const token = resolveToken();
-        if (!token) return;
-
-        const data = await fetchJSON(`${API_ROOT}quizzes`);
-        if (!mounted) return;
-
-        const quizzes = Array.isArray(data) ? data : data?.data || [];
-        setTotalQuizzes(quizzes.length);
-
-        const now = new Date();
-        const upcoming = quizzes.filter((q) => statusOf(q, now) === "upcoming").length;
-        setUpcomingQuizzes(upcoming);
-
-        const sorted = [...quizzes].sort((a, b) => {
-          const A =
-            parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() ||
-            0;
-          const B =
-            parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() ||
-            0;
-          return B - A;
-        });
-        setRecentQuizzes(sorted.slice(0, 5));
-
-        const avgScores = quizzes
-          .map((q) => Number(q.average_score))
-          .filter(Number.isFinite);
-        const completionRates = quizzes
-          .map((q) => Number(q.completion_rate))
-          .filter(Number.isFinite);
-        const averageScore = avgScores.length
-          ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length)
-          : 0;
-        const completionRate = completionRates.length
-          ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length)
-          : 0;
-        const topQuiz =
-          [...quizzes]
-            .filter((q) => Number.isFinite(Number(q.average_score)))
-            .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] || null;
-
-        setPerformanceStats({
-          averageScore,
-          completionRate,
-          topPerformingQuiz: topQuiz?.name || topQuiz?.quiz_title || topQuiz?.title || "N/A",
-        });
-      } catch (err) {
-        console.error("Error fetching quizzes:", err);
-      } finally {
-        if (mounted) setLoadingQuizzes(false);
+      const data = await fetchJSON(`${API_ROOT}checkauth`);
+      const nameFromApi = data?.teacher?.name || data?.data?.name || data?.user?.name || data?.name || null;
+      if (nameFromApi) {
+        setTeacherName(nameFromApi);
+        const updatedUser = { ...user, name: nameFromApi };
+        login(updatedUser);
+        localStorage.setItem("userInfo", JSON.stringify(updatedUser));
       }
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
+    } catch (error) {
+      console.error("Error loading teacher info:", error);
+    }
+  }, [login, user]);
+
+  // ---------------- Load quizzes ----------------
+  const loadQuizzes = useCallback(async () => {
+    setLoadingQuizzes(true);
+    try {
+      const data = await fetchJSON(`${API_ROOT}quizzes`);
+      setQuizzes(Array.isArray(data) ? data : data?.data || []);
+    } catch (err) {
+      console.error("Error fetching quizzes:", err);
+    } finally {
+      setLoadingQuizzes(false);
+    }
   }, []);
+
+  // ---------------- Load notifications ----------------
+  const loadNotifications = useCallback(async () => {
+    setLoadingNotifications(true);
+    try {
+      const mockNotifications = [
+        { id: 1, message: "Quiz 'Math Test' has been graded", time: "2 hours ago" },
+        { id: 2, message: "New student registered for your class", time: "1 day ago" },
+        { id: 3, message: "Reminder: Physics quiz starts tomorrow", time: "2 days ago" },
+      ];
+      setNotifications(mockNotifications);
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, []);
+
+  // ---------------- Load student count ----------------
+  const loadStudentCount = useCallback(async () => {
+    setTotalStudents(42); // replace with API call if needed
+  }, []);
+
+  // ---------------- Initial data load ----------------
+  useEffect(() => {
+    loadTeacherInfo();
+    loadQuizzes();
+    loadNotifications();
+    loadStudentCount();
+  }, [loadTeacherInfo, loadQuizzes, loadNotifications, loadStudentCount]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 font-sans text-slate-800 flex">
       <Sidebar teacherName={teacherName} initials={initials} />
       <main className="flex-1 overflow-auto">
-        <TopNav notifications={notifications} />
+      
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
           <section className="mb-8">
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
               {greeting}, {teacherName}
             </h1>
-            <p className="text-slate-600 mt-1">Here’s what’s happening with your quizzes today.</p>
+            <p className="text-slate-600 mt-1">Here's what's happening with your quizzes today.</p>
           </section>
 
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard title="Total Quizzes" value={totalQuizzes} change={loadingQuizzes ? "…" : ""} icon="clipboard" />
-            <StatCard title="Active Students" value={totalStudents} change="" icon="students" />
-            <StatCard title="Upcoming Quizzes" value={upcomingQuizzes} change="" icon="calendar" />
-          </section>
+          <DashboardStats
+            totalQuizzes={totalQuizzes}
+            upcomingQuizzes={upcomingQuizzes}
+            totalStudents={totalStudents}
+            loading={loadingQuizzes}
+          />
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold">Quick Actions</h2>
-                <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">View all</button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <ActionButton type="createQuiz" />
-                <ActionButton type="viewAnalytics" />
-                <ActionButton type="manageStudents" />
-                <ActionButton type="gradeSubmissions" />
-              </div>
-            </div>
-
-            <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-xl font-semibold mb-6">Class Performance</h2>
-              <PerformanceMetric label="Average Score" value={`${performanceStats.averageScore}%`} progress={performanceStats.averageScore} color="bg-indigo-600" />
-              <PerformanceMetric label="Completion Rate" value={`${performanceStats.completionRate}%`} progress={performanceStats.completionRate} color="bg-emerald-600" />
-              <div className="pt-4 border-t border-slate-200">
-                <p className="text-sm text-slate-600 mb-1">Top Performing Quiz</p>
-                <p className="font-medium">{performanceStats.topPerformingQuiz}</p>
-              </div>
-            </div>
+            <QuickActionsPanel />
+            <PerformancePanel stats={performanceStats} loading={loadingQuizzes} />
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-xl font-semibold mb-6">Recent Quizzes</h2>
-              {recentQuizzes.map((quiz, idx) => (
-                <QuizCard key={quiz.id || idx} quiz={quiz} />
-              ))}
-            </div>
-
-            <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-xl font-semibold mb-6">Notifications</h2>
-              {notifications.length > 0 ? (
-                notifications.map((n) => <NotificationItem key={n.id} notification={n} />)
-              ) : (
-                <p className="text-sm text-slate-600">You're all caught up.</p>
-              )}
-            </div>
+            <RecentQuizzesPanel quizzes={recentQuizzes} loading={loadingQuizzes} />
+            <NotificationsPanel notifications={notifications} loading={loadingNotifications} />
           </section>
         </div>
       </main>

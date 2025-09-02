@@ -106,7 +106,9 @@ Route::delete('options/{id}', [OptionController::class, 'destroy']);
 Route::get('options/{id}', [OptionController::class, 'show']);
 
 // Add this inside your sanctum-protected group
-Route::get('checkauth', [TeacherAuthController::class, 'checkAuth']);
+Route::get('checkauth', [TeacherAuthController::class, 'checkAuth']);//teacher check auth
+Route::get('adcheckauth', [AuthenticationController::class, 'checkAuth']);//admin check auth
+Route::get('stcheckauth', [studentauthController::class, 'checkAuth']);//student check auth
 
 
 });

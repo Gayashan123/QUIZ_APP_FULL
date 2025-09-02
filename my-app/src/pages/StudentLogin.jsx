@@ -15,26 +15,23 @@ const StudentLogin = ({ closeLogin }) => {
   const navigate = useNavigate();
   const { login } = useContext(AuthContext);
 
-  // 🔹 States
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // 🔹 Input change handler
   const handleChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
   };
 
-  // 🔹 Submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/authenticate", {
+      const res = await fetch("http://127.0.0.1:8000/api/stauthenticate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -49,17 +46,21 @@ const StudentLogin = ({ closeLogin }) => {
         throw new Error(result.message || "Login failed");
       }
 
-      // 🔹 Save user in AuthContext
-      const userData = { email: credentials.username, token: result.token || null };
+      // Set user type to "student"
+      const userData = { 
+        email: credentials.username, 
+        token: result.token, 
+        type: "student",
+        id: result.student?.id || null
+      };
+      
       login(userData);
 
-      // 🔹 Remember Me feature
       if (rememberMe) {
         localStorage.setItem("userInfo", JSON.stringify(userData));
-      } 
+      }
 
-      // ✅ Redirect after success
-      navigate("/admin");
+      navigate("/student");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -69,7 +70,6 @@ const StudentLogin = ({ closeLogin }) => {
 
   return (
     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 sm:p-10 border border-gray-200">
-      {/* Close Button */}
       <button
         onClick={closeLogin}
         className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 transition"
@@ -77,7 +77,6 @@ const StudentLogin = ({ closeLogin }) => {
         <XMarkIcon className="h-6 w-6 text-gray-500 hover:text-gray-700" />
       </button>
 
-      {/* Header */}
       <div className="flex items-center justify-center gap-3 mb-4">
         <UserIcon className="h-7 w-7 text-blue-500" />
         <h2 className="text-3xl font-semibold text-gray-900">Student Login</h2>
@@ -86,22 +85,19 @@ const StudentLogin = ({ closeLogin }) => {
         Enter your credentials to access your dashboard
       </p>
 
-      {/* Error */}
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
           {error}
         </div>
       )}
 
-      {/* Form */}
       <form className="space-y-5" onSubmit={handleSubmit}>
-        {/* Username */}
         <div>
           <label
             htmlFor="username"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-        Email 
+            Email 
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -121,7 +117,6 @@ const StudentLogin = ({ closeLogin }) => {
           </div>
         </div>
 
-        {/* Password */}
         <div>
           <label
             htmlFor="password"
@@ -159,7 +154,6 @@ const StudentLogin = ({ closeLogin }) => {
           </div>
         </div>
 
-        {/* Remember Me & Help */}
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 text-gray-700">
             <input
@@ -177,7 +171,6 @@ const StudentLogin = ({ closeLogin }) => {
           </div>
         </div>
 
-        {/* Submit Button */}
         <button
           type="submit"
           disabled={isLoading}

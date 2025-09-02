@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, Home } from "lucide-react";
+import { FaHome, FaEye, FaEyeSlash, FaSave, FaPlusCircle, FaTrashAlt, 
+         FaUpload, FaCheckCircle, FaEdit, FaImage, FaTimes } from "react-icons/fa";
+import { IoMdClose } from "react-icons/io";
 import {
   Grid,
   Typography,
@@ -22,16 +24,8 @@ import {
   Snackbar,
   Alert,
   MenuItem,
+  InputAdornment,
 } from "@mui/material";
-import {
-  AddCircleOutline,
-  DeleteOutline,
-  UploadFile,
-  CheckCircle,
-  Image as ImageIcon,
-  Close,
-  Edit as EditIcon,
-} from "@mui/icons-material";
 import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
 import { AuthContext } from "../../context/Auth";
 
@@ -40,14 +34,13 @@ const steps = ["Quiz Details", "Add Questions", "Review & Publish"];
 /* ------------------------- Date helpers (local, safe) ------------------------- */
 function parseLocalDateTime(value) {
   if (!value) return null;
-  const d = new Date(value); // datetime-local string -> local Date
+  const d = new Date(value);
   return isNaN(d.getTime()) ? null : d;
 }
 function pad2(n) {
   return n.toString().padStart(2, "0");
 }
 function toLocalSqlDateTime(date) {
-  // YYYY-MM-DD HH:mm:ss in local time
   const y = date.getFullYear();
   const m = pad2(date.getMonth() + 1);
   const d = pad2(date.getDate());
@@ -137,6 +130,7 @@ export default function CreateQuiz() {
 
   const [activeStep, setActiveStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [quiz, setQuiz] = useState({
     quiz_title: "",
@@ -156,7 +150,6 @@ export default function CreateQuiz() {
     severity: "success",
   });
 
-  // Use latest token (context first, then LS)
   const authToken = user?.token || tokenFromLS() || "";
   const headers = useMemo(
     () => ({
@@ -254,11 +247,9 @@ export default function CreateQuiz() {
 
   const handleBack = () => setActiveStep((prev) => prev - 1);
 
-  // Resolve teacher_id with priority: context -> localStorage -> JWT -> API
   const resolveTeacherId = async () => {
     if (user?.teacher_id) return user.teacher_id;
 
-    // Try localStorage
     try {
       const raw = localStorage.getItem("userInfo");
       if (raw) {
@@ -273,7 +264,6 @@ export default function CreateQuiz() {
       }
     } catch {}
 
-    // Try JWT
     const payload = decodeJwtPayload(authToken);
     if (payload) {
       const id =
@@ -285,7 +275,6 @@ export default function CreateQuiz() {
         parseIdCandidate(payload?.user?.teacher_id) ||
         parseIdCandidate(payload?.user?.id);
       if (id) {
-        // Update persisted user for future requests
         const raw = localStorage.getItem("userInfo");
         if (raw) {
           try {
@@ -299,7 +288,6 @@ export default function CreateQuiz() {
       }
     }
 
-    // Call API as last resort
     try {
       const res = await fetch(`${apiurl}checkauth`, { headers });
       if (res.ok) {
@@ -327,7 +315,6 @@ export default function CreateQuiz() {
     return null;
   };
 
-  // Helper: extract ID from various API response shapes
   const pickId = (obj) =>
     obj?.id ||
     obj?.data?.id ||
@@ -337,10 +324,7 @@ export default function CreateQuiz() {
     obj?.result?.id ||
     null;
 
-  // Create quiz, then questions, then options (cascade)
-  // Uses flat endpoints: POST /api/questions and POST /api/options
   const createQuizCascade = async (quizPayload, questions) => {
-    // 1) Create Quiz
     const resQuiz = await fetch(`${apiurl}quizzes`, {
       method: "POST",
       headers,
@@ -353,14 +337,13 @@ export default function CreateQuiz() {
     const quizId = pickId(quizJson);
     if (!quizId) throw new Error("Quiz created but ID not returned by API");
 
-    // 2) Create each question (flat endpoint)
     for (const q of questions) {
       const qPayload = {
         quiz_id: Number(quizId),
         question_text: q.text.trim(),
         points: Number(q.points),
         explanation: q.explanation?.trim() || null,
-        image_url: q.imageUrl || null, // adjust/remove if backend doesn't use images
+        image_url: q.imageUrl || null,
       };
 
       const resQuestion = await fetch(`${apiurl}questions`, {
@@ -378,12 +361,10 @@ export default function CreateQuiz() {
       const questionId = pickId(qJson);
       if (!questionId) throw new Error("Question created but ID not returned by API");
 
-      // 3) Create options for the question (flat endpoint)
       for (let idx = 0; idx < q.options.length; idx++) {
         const optPayload = {
           question_id: Number(questionId),
           option_text: q.options[idx].trim(),
-          // If your API expects true/false, change to: is_correct: idx === q.correctAnswer
           is_correct: idx === q.correctAnswer ? 1 : 0,
         };
         const resOpt = await fetch(`${apiurl}options`, {
@@ -419,7 +400,6 @@ export default function CreateQuiz() {
       return;
     }
 
-    // Format date-times safely in local SQL format
     const startDate = parseLocalDateTime(quiz.start_time);
     const endDate = parseLocalDateTime(quiz.end_time);
     if (!startDate || !endDate) {
@@ -427,13 +407,10 @@ export default function CreateQuiz() {
       return;
     }
 
-    // Base quiz payload WITHOUT nested questions (cascade creation instead)
-    // Includes both common and original keys to maximize backend compatibility
     const startSql = toLocalSqlDateTime(startDate);
     const endSql = toLocalSqlDateTime(endDate);
     const quizPayload = {
       teacher_id: Number(teacher_id),
-      // titles/password variants
       title: quiz.quiz_title.trim(),
       quiz_title: quiz.quiz_title.trim(),
       password: quiz.quiz_password?.trim() || null,
@@ -441,7 +418,6 @@ export default function CreateQuiz() {
       subject_id: Number(quiz.subject_id),
       time_limit: Number(quiz.time_limit),
       passing_score: Number(quiz.passing_score),
-      // datetime variants
       start_at: startSql,
       end_at: endSql,
       start_time: startSql,
@@ -475,8 +451,8 @@ export default function CreateQuiz() {
     };
 
     return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <Typography variant="h6" fontWeight={600} color="text.primary">
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        <Typography variant="h5" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
           Quiz Information
         </Typography>
 
@@ -488,6 +464,7 @@ export default function CreateQuiz() {
           onChange={handleChange}
           required
           variant="outlined"
+          sx={{ mb: 2 }}
         />
 
         <TextField
@@ -499,6 +476,7 @@ export default function CreateQuiz() {
           onChange={handleChange}
           required
           variant="outlined"
+          sx={{ mb: 2 }}
         >
           <MenuItem value="">Select a subject</MenuItem>
           {subjects.map((subject) => (
@@ -514,13 +492,27 @@ export default function CreateQuiz() {
           name="quiz_password"
           value={quiz.quiz_password}
           onChange={handleChange}
-          type="password"
+          type={showPassword ? "text" : "password"}
           variant="outlined"
+          sx={{ mb: 2 }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={() => setShowPassword(!showPassword)}
+                  edge="end"
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
         />
 
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={12} sm={6}>
             <TextField
+              fullWidth
               label="Time Limit (minutes)"
               name="time_limit"
               type="number"
@@ -531,8 +523,9 @@ export default function CreateQuiz() {
               inputProps={{ min: 1 }}
             />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} sm={6}>
             <TextField
+              fullWidth
               label="Passing Score (%)"
               name="passing_score"
               type="number"
@@ -546,8 +539,9 @@ export default function CreateQuiz() {
         </Grid>
 
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} sm={6}>
             <TextField
+              fullWidth
               label="Start Time"
               name="start_time"
               type="datetime-local"
@@ -558,8 +552,9 @@ export default function CreateQuiz() {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} sm={6}>
             <TextField
+              fullWidth
               label="End Time"
               name="end_time"
               type="datetime-local"
@@ -594,10 +589,9 @@ export default function CreateQuiz() {
 
     useEffect(() => {
       if (tabValue === 1 && editIndex !== null) {
-        // switching to PDF upload mode cancels editing
         resetCurrentQuestion();
       }
-    }, [tabValue]); // eslint-disable-line
+    }, [tabValue]);
 
     const handleTabChange = (event, newValue) => setTabValue(newValue);
 
@@ -752,7 +746,6 @@ export default function CreateQuiz() {
       const file = event.target.files[0];
       if (file && file.type === "application/pdf") {
         setIsUploading(true);
-        // Replace with actual PDF processing
         setTimeout(() => {
           const mockExtractedQuestions = [
             {
@@ -785,7 +778,7 @@ export default function CreateQuiz() {
       <>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
           <Typography variant="h5" fontWeight={600} color="text.primary" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <AddCircleOutline color="primary" />
+            <FaPlusCircle color="#6366f1" />
             Quiz Questions
           </Typography>
           <Chip label={`${quiz.questions.length} questions added`} color="primary" variant="outlined" />
@@ -821,11 +814,11 @@ export default function CreateQuiz() {
                         "&:hover": { backgroundColor: "rgba(0,0,0,0.7)" },
                       }}
                     >
-                      <Close fontSize="small" />
+                      <IoMdClose fontSize="small" />
                     </IconButton>
                   </Box>
                 ) : (
-                  <Button component="label" variant="outlined" startIcon={<ImageIcon />}>
+                  <Button component="label" variant="outlined" startIcon={<FaImage />}>
                     Upload Image
                     <input type="file" hidden accept="image/*" onChange={handleImageUpload} />
                   </Button>
@@ -866,7 +859,7 @@ export default function CreateQuiz() {
                       />
                       {currentQuestion.options.length > 2 && (
                         <IconButton onClick={() => removeOption(idx)} color="error" size="small">
-                          <DeleteOutline fontSize="small" />
+                          <FaTrashAlt fontSize="small" />
                         </IconButton>
                       )}
                     </Box>
@@ -876,7 +869,7 @@ export default function CreateQuiz() {
                   <Typography variant="caption" color="error">{validationErrors.correctAnswer}</Typography>
                 )}
                 {currentQuestion.options.length < 6 && (
-                  <Button onClick={addOption} startIcon={<AddCircleOutline />} size="small" sx={{ mt: 1 }}>
+                  <Button onClick={addOption} startIcon={<FaPlusCircle />} size="small" sx={{ mt: 1 }}>
                     Add Option
                   </Button>
                 )}
@@ -910,7 +903,7 @@ export default function CreateQuiz() {
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Button
                   variant="contained"
-                  startIcon={editIndex !== null ? <CheckCircle /> : <AddCircleOutline />}
+                  startIcon={editIndex !== null ? <FaCheckCircle /> : <FaPlusCircle />}
                   onClick={saveQuestion}
                   fullWidth
                   size="large"
@@ -984,10 +977,10 @@ export default function CreateQuiz() {
                           </Box>
                           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                             <IconButton onClick={() => editQuestion(i)} color="primary" size="small">
-                              <EditIcon fontSize="small" />
+                              <FaEdit fontSize="small" />
                             </IconButton>
                             <IconButton onClick={() => removeQuestion(i)} color="error" size="small">
-                              <DeleteOutline fontSize="small" />
+                              <FaTrashAlt fontSize="small" />
                             </IconButton>
                           </Box>
                         </Box>
@@ -1020,7 +1013,7 @@ export default function CreateQuiz() {
                   "&:hover": { borderColor: "#4f46e5", background: "#f0f5ff" },
                 }}
               >
-                <UploadFile color="primary" sx={{ fontSize: 48, mb: 2 }} />
+                <FaUpload color="#4f46e5" size={48} style={{ marginBottom: '16px' }} />
                 <Typography variant="h6" sx={{ mb: 1 }}>Upload Questions PDF</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                   Drag and drop your PDF file here, or click to browse
@@ -1028,7 +1021,7 @@ export default function CreateQuiz() {
                 <Button
                   variant="contained"
                   component="label"
-                  startIcon={<UploadFile />}
+                  startIcon={<FaUpload />}
                   sx={{
                     background: "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)",
                     "&:hover": { background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)" },
@@ -1053,74 +1046,92 @@ export default function CreateQuiz() {
     const subjectName = subjects.find((s) => `${s.id}` === `${quiz.subject_id}`)?.name || quiz.subject_id;
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <Typography variant="h6" fontWeight={600} color="text.primary">
+        <Typography variant="h5" fontWeight={600} color="text.primary">
           Review Quiz Details
         </Typography>
 
-        <Paper elevation={2} sx={{ p: 4 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+        <Paper elevation={2} sx={{ p: 4, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ mb: 3, color: "#4f46e5" }}>
             Quiz Information
           </Typography>
-          <Grid container spacing={2}>
+          <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary">Title:</Typography>
-              <Typography variant="body1">{quiz.quiz_title}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Title:</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.quiz_title}</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary">Subject:</Typography>
-              <Typography variant="body1">{subjectName}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Subject:</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{subjectName}</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary">Time Limit:</Typography>
-              <Typography variant="body1">{quiz.time_limit} minutes</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Time Limit:</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.time_limit} minutes</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary">Passing Score:</Typography>
-              <Typography variant="body1">{quiz.passing_score}%</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Passing Score:</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.passing_score}%</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary">Start Time:</Typography>
-              <Typography variant="body1">{quiz.start_time}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Start Time:</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.start_time}</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary">End Time:</Typography>
-              <Typography variant="body1">{quiz.end_time}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>End Time:</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.end_time}</Typography>
             </Grid>
           </Grid>
         </Paper>
 
-        <Paper elevation={2} sx={{ p: 4 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+        <Paper elevation={2} sx={{ p: 4, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ mb: 3, color: "#4f46e5" }}>
             Questions ({quiz.questions.length})
           </Typography>
           {quiz.questions.map((q, i) => (
-            <Box key={i} sx={{ mb: 4, p: 3, borderLeft: "4px solid #6366f1", background: "#f1f5f9" }}>
-              <Typography variant="body1" fontWeight={600}>
+            <Box key={i} sx={{ mb: 4, p: 3, borderRadius: 2, borderLeft: "4px solid #6366f1", background: "#f8fafc" }}>
+              <Typography variant="body1" fontWeight={600} sx={{ mb: 2 }}>
                 Q{i + 1}: {q.text}
               </Typography>
-              <Box sx={{ ml: 2, mt: 1 }}>
+              <Box sx={{ ml: 2 }}>
                 {q.options.map((opt, idx) => (
                   <Typography
                     key={idx}
                     variant="body2"
                     sx={{
-                      color: idx === q.correctAnswer ? "#6366f1" : "text.secondary",
+                      color: idx === q.correctAnswer ? "#4f46e5" : "text.secondary",
                       fontWeight: idx === q.correctAnswer ? 600 : 400,
+                      mb: 1,
                     }}
                   >
                     {String.fromCharCode(65 + idx)}. {opt}
                   </Typography>
                 ))}
               </Box>
-              <Chip label={`${q.points} point${q.points !== 1 ? "s" : ""}`} size="small" sx={{ mt: 2, background: "#6366f1", color: "#fff" }} />
+              <Chip 
+                label={`${q.points} point${q.points !== 1 ? "s" : ""}`} 
+                size="small" 
+                sx={{ 
+                  mt: 2, 
+                  background: "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)", 
+                  color: "#fff" 
+                }} 
+              />
               {q.explanation && (
-                <Typography variant="body2" sx={{ mt: 1, color: "#64748b", fontStyle: "italic" }}>
+                <Typography variant="body2" sx={{ mt: 2, color: "#64748b", fontStyle: "italic" }}>
                   <strong>Explanation:</strong> {q.explanation}
                 </Typography>
               )}
               {q.imageUrl && (
                 <Box sx={{ mt: 2 }}>
-                  <Avatar variant="rounded" src={q.imageUrl} sx={{ width: 120, height: 120, border: "1px solid #e0e0e0" }} />
+                  <Avatar 
+                    variant="rounded" 
+                    src={q.imageUrl} 
+                    sx={{ 
+                      width: 120, 
+                      height: 120, 
+                      border: "1px solid #e0e0e0",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                    }} 
+                  />
                 </Box>
               )}
             </Box>
@@ -1131,7 +1142,7 @@ export default function CreateQuiz() {
   };
 
   return (
-    <Box sx={{ minHeight: "100vh", background: "#f3f4f6", display: "flex" }}>
+    <Box sx={{ minHeight: "100vh", background: "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)", display: "flex" }}>
       <Box sx={{ flex: 1 }}>
         <Snackbar
           open={snackbar.open}
@@ -1144,36 +1155,85 @@ export default function CreateQuiz() {
           </Alert>
         </Snackbar>
 
-        <Box sx={{ maxWidth: "900px", mx: "auto", px: 2, py: 6 }}>
-          <Box sx={{ background: "#fff", borderRadius: 4, boxShadow: 2, p: { xs: 2, md: 6 }, mt: 4 }}>
+        <Box sx={{ maxWidth: "1000px", mx: "auto", px: { xs: 2, sm: 3 }, py: 6 }}>
+          <Box sx={{ 
+            background: "#fff", 
+            borderRadius: 4, 
+            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)", 
+            p: { xs: 3, md: 6 }, 
+            mt: 4 
+          }}>
             <Box sx={{ display: "flex", justifyContent: "end", mb: 4 }}>
-              <Button onClick={() => navigate("/home")} variant="outlined" startIcon={<Home />} sx={{ fontWeight: 600 }}>
+              <Button 
+                onClick={() => navigate("/home")} 
+                variant="outlined" 
+                startIcon={<FaHome />} 
+                sx={{ 
+                  fontWeight: 600,
+                  borderRadius: 2,
+                  borderWidth: 2,
+                  "&:hover": { borderWidth: 2 }
+                }}
+              >
                 Home
               </Button>
             </Box>
 
-            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 8 }}>
+            <Box sx={{ 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              mb: 8,
+              position: "relative",
+              "&::after": {
+                content: '""',
+                position: "absolute",
+                bottom: -16,
+                left: 0,
+                right: 0,
+                height: "2px",
+                background: "linear-gradient(90deg, transparent 0%, #e2e8f0 50%, transparent 100%)"
+              }
+            }}>
               {steps.map((label, index) => (
                 <Box
                   key={label}
                   sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
                     flex: 1,
-                    textAlign: "center",
-                    fontWeight: 600,
-                    color: index === activeStep ? "primary.main" : "text.secondary",
                   }}
                 >
                   <Box
                     sx={{
-                      width: 16,
-                      height: 16,
-                      mx: "auto",
+                      width: 40,
+                      height: 40,
                       borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                       mb: 1,
-                      background: index <= activeStep ? "#6366f1" : "#cbd5e1",
+                      background: index <= activeStep ? 
+                        "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" : 
+                        "#cbd5e1",
+                      color: index <= activeStep ? "white" : "text.secondary",
+                      fontWeight: 600,
+                      boxShadow: index <= activeStep ? "0 4px 6px rgba(79, 70, 229, 0.3)" : "none"
                     }}
-                  />
-                  {label}
+                  >
+                    {index + 1}
+                  </Box>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      fontWeight: 600, 
+                      textAlign: "center",
+                      color: index === activeStep ? "primary.main" : "text.secondary",
+                    }}
+                  >
+                    {label}
+                  </Typography>
                 </Box>
               ))}
             </Box>
@@ -1184,12 +1244,27 @@ export default function CreateQuiz() {
 
             {activeStep === 2 && <ReviewStep quiz={quiz} subjects={subjects} />}
 
-            <Box sx={{ mt: 8, display: "flex", flexDirection: { xs: "column", sm: "row" }, justifyContent: "space-between", gap: 2 }}>
+            <Box sx={{ 
+              mt: 8, 
+              display: "flex", 
+              flexDirection: { xs: "column", sm: "row" }, 
+              justifyContent: "space-between", 
+              gap: 2,
+              pt: 3,
+              borderTop: "1px solid #e2e8f0"
+            }}>
               <Button
                 onClick={handleBack}
                 disabled={activeStep === 0 || isSubmitting}
                 variant="outlined"
-                sx={{ fontWeight: 600, px: 4, py: 1.5 }}
+                sx={{ 
+                  fontWeight: 600, 
+                  px: 4, 
+                  py: 1.5,
+                  borderRadius: 2,
+                  borderWidth: 2,
+                  "&:hover": { borderWidth: 2 }
+                }}
               >
                 Back
               </Button>
@@ -1199,13 +1274,17 @@ export default function CreateQuiz() {
                   onClick={submitQuiz}
                   disabled={isSubmitting}
                   variant="contained"
-                  startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <Save />}
+                  startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <FaSave />}
                   sx={{
                     px: 4,
                     py: 1.5,
                     fontWeight: 600,
+                    borderRadius: 2,
                     background: "linear-gradient(90deg, #10b981 0%, #22d3ee 100%)",
-                    "&:hover": { background: "linear-gradient(90deg, #059669 0%, #0ea5e9 100%)" },
+                    "&:hover": { 
+                      background: "linear-gradient(90deg, #059669 0%, #0ea5e9 100%)",
+                      boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
+                    },
                   }}
                 >
                   {isSubmitting ? "Publishing..." : "Publish Quiz"}
@@ -1219,8 +1298,12 @@ export default function CreateQuiz() {
                     px: 4,
                     py: 1.5,
                     fontWeight: 600,
+                    borderRadius: 2,
                     background: "linear-gradient(90deg, #6366f1 0%, #a78bfa 100%)",
-                    "&:hover": { background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)" },
+                    "&:hover": { 
+                      background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)",
+                      boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)"
+                    },
                   }}
                 >
                   Continue
