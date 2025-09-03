@@ -169,12 +169,8 @@ class StudentQuizController extends Controller
 
 public function reviewByQuiz(Request $request, int $studentId, int $quizId)
 {
-    // Optional security: ensure the request user matches this student
-    // if (optional($request->user())->id !== $studentId) {
-    //     return response()->json(['message' => 'Forbidden'], 403);
-    // }
-
-    $attempt = \App\Models\StudentQuiz::with('quiz.subject')
+    // Load attempt with quiz, subject, and teacher
+    $attempt = StudentQuiz::with(['quiz.subject', 'quiz.teacher'])
         ->where('student_id', $studentId)
         ->where('quiz_id', $quizId)
         ->first();
@@ -184,7 +180,7 @@ public function reviewByQuiz(Request $request, int $studentId, int $quizId)
     }
 
     // Fetch per-question results
-    $results =Student_result::where('student_quiz_id', $attempt->id)
+    $results = Student_result::where('student_quiz_id', $attempt->id)
         ->get(['question_id', 'solution_id', 'is_correct'])
         ->keyBy('question_id');
 
@@ -201,7 +197,7 @@ public function reviewByQuiz(Request $request, int $studentId, int $quizId)
     $qPayload = $questions->map(function ($q) use ($results, &$correct) {
         $res = $results->get($q->id);
         $sel = $res ? $res->solution_id : null;
-        $ok  = (bool)($res ? $res->is_correct : false);
+        $ok  = (bool) ($res ? $res->is_correct : false);
         if ($ok) $correct++;
         return [
             'id' => $q->id,
@@ -230,6 +226,7 @@ public function reviewByQuiz(Request $request, int $studentId, int $quizId)
                 'id' => $attempt->quiz->id,
                 'title' => $attempt->quiz->quiz_title ?? $attempt->quiz->title ?? 'Quiz',
                 'subject' => optional($attempt->quiz->subject)->name,
+                'teacher' => optional($attempt->quiz->teacher)->name ?? 'Unknown Teacher', // <-- teacher added
                 'time_limit' => (int) ($attempt->quiz->time_limit ?? 0),
             ],
         ],

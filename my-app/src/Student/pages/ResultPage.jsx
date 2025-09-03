@@ -1,25 +1,37 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiurl } from "../../Admin/common/Http";
 import Sidebar from "../component/Sidebar";
 import { toast } from "react-toastify";
-import {
-  FiCheckCircle,
-  FiXCircle,
-  FiArrowLeft,
-  FiAward,
-  FiStar,
-  FiClock,
-  FiUser,
+import { AuthContext } from "../../context/Auth";
+
+// Heroicons (using React Icons instead for more options)
+import { 
+  FiCheckCircle, 
+  FiXCircle, 
+  FiArrowLeft, 
+  FiAward, 
+  FiStar, 
+  FiClock, 
+  FiUser, 
   FiBookOpen,
-  FiBarChart2
+  FiBarChart2,
+  FiChevronRight,
+  FiBook,
+  FiCheck,
+  FiX
 } from "react-icons/fi";
 
 const API_ROOT = apiurl.replace(/\/+$/, "") + "/";
 
 const resolveToken = () => {
-  try { return JSON.parse(localStorage.getItem("userInfo"))?.token || ""; } catch { return ""; }
+  try { 
+    return JSON.parse(localStorage.getItem("userInfo"))?.token || ""; 
+  } catch { 
+    return ""; 
+  }
 };
+
 const makeHeaders = () => {
   const h = new Headers();
   h.set("Accept", "application/json");
@@ -27,11 +39,15 @@ const makeHeaders = () => {
   if (tk) h.set("Authorization", `Bearer ${tk}`);
   return h;
 };
+
 const fetchJSON = async (url) => {
   const res = await fetch(url, { headers: makeHeaders() });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { const e = await res.json(); msg = e?.message || e?.error || JSON.stringify(e) || msg; } catch {}
+    try { 
+      const e = await res.json(); 
+      msg = e?.message || e?.error || JSON.stringify(e) || msg; 
+    } catch {}
     throw new Error(msg);
   }
   return res.json();
@@ -45,73 +61,78 @@ export default function StudentQuizReview() {
   const [summary, setSummary] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [error, setError] = useState("");
-  const [studentName, setStudentName] = useState("");
+  const [teacherName, setTeacherName] = useState("");
+  const { user } = useContext(AuthContext);
+  
+  // Get student name from authentication context
+  const studentName = useMemo(() => {
+    return user?.name || user?.user?.name || "Student";
+  }, [user]);
 
   useEffect(() => {
-    // Get student name from localStorage
+  const load = async () => {
+    setLoading(true);
+    setError("");
     try {
-      const userInfo = JSON.parse(localStorage.getItem("userInfo"));
-      const name = userInfo?.name || userInfo?.user?.name || "Student";
-      setStudentName(name);
-    } catch {
-      setStudentName("Student");
+      const studentId = user?.id;
+      
+      if (!studentId) throw new Error("Student not found. Please log in again.");
+
+      // Fetch the quiz review data
+      const data = await fetchJSON(`${API_ROOT}students/${studentId}/quizzes/${quizId}/review`);
+      
+      // Set attempt, summary, and questions
+      setAttempt(data?.attempt || null);
+      setSummary(data?.summary || null);
+      setQuestions(Array.isArray(data?.questions) ? data.questions : []);
+
+      // <-- THIS is where you update teacherName
+     // Set teacher name directly (since API returns a string)
+const teacherNameFromResponse = data?.attempt?.quiz?.teacher || "Unknown Teacher";
+setTeacherName(teacherNameFromResponse);
+
+
+    } catch (e) {
+      setError(e.message || "Failed to load review");
+      toast.error(e.message || "Failed to load review");
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
+  load();
+}, [quizId, user]);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError("");
-      try {
-        // resolve student id
-        let studentId = null;
-        try {
-          const u = JSON.parse(localStorage.getItem("userInfo"));
-          studentId = u?.id || u?.user?.id || null;
-        } catch {}
-
-        if (!studentId) throw new Error("Student not found. Please log in again.");
-
-        const data = await fetchJSON(`${API_ROOT}students/${studentId}/quizzes/${quizId}/review`);
-        setAttempt(data?.attempt || null);
-        setSummary(data?.summary || null);
-        setQuestions(Array.isArray(data?.questions) ? data.questions : []);
-      } catch (e) {
-        setError(e.message || "Failed to load review");
-        toast.error(e.message || "Failed to load review");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [quizId]);
 
   const percent = summary?.percent ?? 0;
 
-  const vibe = useMemo(() => {
+  const performanceVibe = useMemo(() => {
     if (percent >= 90) return { 
       title: "Outstanding! 🌟", 
-      text: "You crushed it. Keep the momentum!", 
+      subtitle: "You've mastered this material!",
       color: "bg-gradient-to-r from-emerald-400 to-teal-500",
-      emoji: "🌟"
+      textColor: "text-emerald-50",
+      icon: <FiAward className="h-6 w-6" />
     };
     if (percent >= 75) return { 
       title: "Great Job! 🏆", 
-      text: "Strong performance. A little more practice and you'll ace it!", 
+      subtitle: "Strong performance with room to grow",
       color: "bg-gradient-to-r from-indigo-400 to-purple-500",
-      emoji: "🏆"
+      textColor: "text-indigo-50",
+      icon: <FiStar className="h-6 w-6" />
     };
     if (percent >= 50) return { 
       title: "Good Effort! 💪", 
-      text: "You're getting there. Review mistakes and try again.", 
+      subtitle: "You're on the right track",
       color: "bg-gradient-to-r from-amber-400 to-orange-500",
-      emoji: "💪"
+      textColor: "text-amber-50",
+      icon: <FiBook className="h-6 w-6" />
     };
     return { 
-      title: "Don't Give Up! 🌱", 
-      text: "Every attempt is progress. Revisit concepts and keep going.", 
+      title: "Keep Going! 🌱", 
+      subtitle: "Every attempt is progress",
       color: "bg-gradient-to-r from-rose-400 to-pink-500",
-      emoji: "🌱"
+      textColor: "text-rose-50",
+      icon: <FiBookOpen className="h-6 w-6" />
     };
   }, [percent]);
 
@@ -119,12 +140,20 @@ export default function StudentQuizReview() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex">
         <Sidebar />
-        <div className="flex-1 p-6 max-w-6xl mx-auto">
-          <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-16 bg-white/70 rounded-2xl animate-pulse shadow-sm" />
-            ))}
+        <div className="flex-1 p-6 max-w-4xl mx-auto space-y-4">
+          {/* Skeleton Loaders */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <div className="h-8 bg-gray-200 rounded-lg w-2/3 mb-4 animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/3 mb-6 animate-pulse"></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-32 bg-gray-200 rounded-xl animate-pulse"></div>
+              <div className="h-32 bg-gray-200 rounded-xl animate-pulse"></div>
+            </div>
           </div>
+          
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-40 bg-white rounded-2xl shadow-sm animate-pulse"></div>
+          ))}
         </div>
       </div>
     );
@@ -134,10 +163,16 @@ export default function StudentQuizReview() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex">
         <Sidebar />
-        <div className="flex-1 p-6 max-w-6xl mx-auto">
-          <div className="rounded-2xl border border-red-200 bg-white p-6 text-red-700 shadow-sm">
-            {error || "Result not found."}
-            <button onClick={() => navigate("/studentquiz")} className="ml-4 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition">
+        <div className="flex-1 p-6 max-w-4xl mx-auto flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-md p-8 text-center">
+            <FiXCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold text-gray-800 mb-2">{error || "Result not found"}</h2>
+            <p className="text-gray-600 mb-6">We couldn't retrieve your quiz results</p>
+            <button 
+              onClick={() => navigate("/studentquiz")}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition flex items-center justify-center mx-auto"
+            >
+              <FiArrowLeft className="mr-2" />
               Back to Quizzes
             </button>
           </div>
@@ -149,145 +184,184 @@ export default function StudentQuizReview() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex">
       <Sidebar />
-      <div className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto">
-        {/* Header with Student Name */}
+      
+      {/* Main Content */}
+      <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto">
+        {/* Header with Back Button */}
         <div className="flex items-center mb-6">
-          <div className="rounded-full bg-white p-3 shadow-sm flex items-center justify-center mr-3">
-            <FiUser className="h-5 w-5 text-indigo-600" />
-          </div>
-          <div>
-            <h2 className="text-sm text-gray-500">Good job,</h2>
-            <h1 className="text-xl font-semibold text-gray-800">{studentName}</h1>
+          <button
+            onClick={() => navigate("/studentquiz")}
+            className="flex items-center text-indigo-600 hover:text-indigo-700 transition p-2 rounded-lg hover:bg-indigo-50 mr-4"
+          >
+            <FiArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-2xl font-semibold text-gray-900">Quiz Results</h1>
+        </div>
+
+        {/* Student Card */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+          <div className="flex items-center">
+            <div className="bg-indigo-100 p-3 rounded-full mr-4">
+              <FiUser className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Student</p>
+              <h2 className="text-xl font-medium text-gray-900">{studentName}</h2>
+            </div>
           </div>
         </div>
 
-        {/* Score Card - iOS style */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="flex items-center text-sm text-gray-500 mb-1">
-                <FiBookOpen className="mr-1.5" />
-                <span>{attempt.quiz?.subject || "General Knowledge"}</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900">{attempt.quiz?.title || "Quiz Review"}</h1>
-            </div>
-            <div className={`rounded-full p-3 ${vibe.color} text-white shadow-md`}>
-              <FiAward className="h-6 w-6" />
-            </div>
+        {/* Quiz Summary Card */}
+        <div className={`${performanceVibe.color} text-white rounded-2xl shadow-lg p-6 mb-6`}>
+        <div className="bg-white rounded-2xl shadow-xl p-6 flex justify-between items-start relative overflow-hidden">
+  {/* Soft Decorative Circles */}
+  <div className="absolute -top-6 -left-6 w-24 h-24 bg-indigo-100/40 rounded-full blur-3xl"></div>
+  <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-purple-100/40 rounded-full blur-3xl"></div>
+
+  {/* Left Info */}
+  <div className="relative z-10 space-y-3">
+    {/* Subject */}
+    <div className="flex items-center text-sm font-medium text-gray-700">
+      <FiBookOpen className="mr-2 text-indigo-400" />
+      <span>Subject</span>
+      <span className="ml-2 font-semibold">{attempt.quiz?.subject || "General Knowledge"}</span>
+    </div>
+
+    {/* Quiz Name */}
+    <div className="flex items-center text-lg font-bold text-gray-800">
+      <FiBook className="mr-2 text-purple-400" />
+      <span>Quiz</span>
+      <span className="ml-2">{attempt.quiz?.title || "Untitled Quiz"}</span>
+    </div>
+
+    {/* Teacher */}
+    <div className="flex items-center text-sm text-gray-600 opacity-90">
+      <FiUser className="mr-2 text-green-400" />
+      <span>Teacher</span>
+      <span className="ml-2 font-medium">{teacherName}</span>
+    </div>
+  </div>
+
+  {/* Right Icon Badge */}
+  <div className="relative z-10 flex items-center justify-center bg-indigo-50/70 rounded-full w-16 h-16 shadow-lg">
+    {performanceVibe.icon}
+  </div>
+
+
+
+
+
+
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-sm text-gray-500">Score</div>
-              <div className="text-3xl font-bold text-gray-900 mt-1">{percent}%</div>
-              <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            {/* Score Section */}
+            <div className="bg-white/20 rounded-xl p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm">Your Score</span>
+                <span className="text-2xl font-bold">{percent}%</span>
+              </div>
+              <div className="w-full bg-white/30 rounded-full h-2 mb-1">
                 <div 
-                  className={`h-2 rounded-full ${vibe.color}`} 
+                  className="h-2 rounded-full bg-white" 
                   style={{ width: `${percent}%` }} 
                 />
               </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-sm text-gray-500">Correct Answers</div>
-              <div className="text-3xl font-bold text-gray-900 mt-1">
-                {summary?.correct}/{summary?.total}
-              </div>
-              <div className="text-sm text-gray-500 mt-2">
-                {summary?.correct === summary?.total ? "Perfect score! 🎯" : "Keep practicing!"}
+              <div className="text-xs opacity-90">
+                {summary?.correct}/{summary?.total} correct answers
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center mt-5 text-sm text-gray-500">
-            <FiClock className="mr-1.5" />
-            <span>Finished: {attempt.finished_at ? new Date(attempt.finished_at).toLocaleString() : "-"}</span>
-          </div>
-        </div>
-
-        {/* Performance Message */}
-        <div className={`rounded-2xl p-5 text-white mb-6 ${vibe.color} shadow-md`}>
-          <div className="flex items-start">
-            <span className="text-2xl mr-3">{vibe.emoji}</span>
-            <div>
-              <h3 className="font-semibold text-lg">{vibe.title}</h3>
-              <p className="mt-1 opacity-90">{vibe.text}</p>
+            {/* Completion Time */}
+            <div className="bg-white/20 rounded-xl p-4">
+              <div className="flex items-center text-sm mb-2">
+                <FiClock className="mr-2" />
+                <span>Completed</span>
+              </div>
+              <div className="text-md font-medium">
+                {attempt.finished_at ? new Date(attempt.finished_at).toLocaleString() : "-"}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="flex justify-between items-center mb-6">
-          <button
-            onClick={() => navigate("/studentquiz")}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition shadow-sm"
-          >
-            <FiArrowLeft className="h-5 w-5" /> Back to Quizzes
-          </button>
-          
-          <div className="flex items-center text-sm text-gray-500">
-            <FiBarChart2 className="mr-1.5" />
-            <span>Question Review</span>
+          {/* Performance Message */}
+          <div className="mt-6 pt-4 border-t border-white/20">
+            <h3 className="font-semibold text-lg">{performanceVibe.title}</h3>
+            <p className="text-sm opacity-90 mt-1">{performanceVibe.subtitle}</p>
           </div>
         </div>
 
-        {/* Questions Review */}
-        <div className="space-y-4">
-          {questions.map((q, idx) => {
-            const isCorrect = q.is_correct;
-            const selectedId = q.selected_option_id;
-            const correctId = q.options.find(o => o.is_correct)?.id;
+        {/* Questions Review Section */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Question Review</h2>
+            <span className="text-sm text-gray-500">{questions.length} questions</span>
+          </div>
 
-            return (
-              <div key={q.id} className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center">
-                    <div className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 font-medium mr-3">
-                      {idx + 1}
-                    </div>
-                    <p className="text-gray-900 font-medium">{q.question_text}</p>
-                  </div>
-                  <div className={`inline-flex items-center gap-1 text-sm px-3 py-1 rounded-full ${
-                    isCorrect ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                  }`}>
-                    {isCorrect ? <FiCheckCircle className="h-4 w-4" /> : <FiXCircle className="h-4 w-4" />}
-                    {isCorrect ? "Correct" : "Incorrect"}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {q.options.map(opt => {
-                    const isSel = selectedId === opt.id;
-                    const isCor = opt.is_correct;
-                    
-                    let style = "border-gray-200 bg-white";
-                    if (isSel && isCor) style = "border-emerald-400 bg-emerald-50";
-                    else if (isSel && !isCor) style = "border-rose-400 bg-rose-50";
-                    else if (!isSel && isCor) style = "border-emerald-300 bg-emerald-50/50";
-
-                    return (
-                      <div key={opt.id} className={`p-4 border rounded-xl flex items-center justify-between ${style}`}>
-                        <span className="text-gray-800">{opt.option_text}</span>
-                        <span className="text-xs font-medium">
-                          {isSel ? (isCor ? "Your answer ✓" : "Your answer") : isCor ? "Correct answer ✓" : ""}
-                        </span>
+          <div className="space-y-4">
+            {questions.map((q, idx) => {
+              const isCorrect = q.is_correct;
+              const selectedId = q.selected_option_id;
+              
+              return (
+                <div key={q.id} className="bg-white rounded-2xl shadow-sm p-5">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center">
+                      <div className="bg-gray-100 text-gray-700 rounded-lg w-8 h-8 flex items-center justify-center font-medium mr-3">
+                        {idx + 1}
                       </div>
-                    );
-                  })}
+                      <h3 className="text-gray-900 font-medium">{q.question_text}</h3>
+                    </div>
+                    <div className={`flex items-center text-sm px-3 py-1 rounded-full ${
+                      isCorrect ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                    }`}>
+                      {isCorrect ? <FiCheck className="h-4 w-4 mr-1" /> : <FiX className="h-4 w-4 mr-1" />}
+                      {isCorrect ? "Correct" : "Incorrect"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {q.options.map(opt => {
+                      const isSel = selectedId === opt.id;
+                      const isCor = opt.is_correct;
+                      
+                      let optionStyle = "border-gray-200 bg-white";
+                      if (isSel && isCor) optionStyle = "border-emerald-400 bg-emerald-50";
+                      else if (isSel && !isCor) optionStyle = "border-rose-400 bg-rose-50";
+                      else if (!isSel && isCor) optionStyle = "border-emerald-300 bg-emerald-50/50";
+
+                      return (
+                        <div 
+                          key={opt.id} 
+                          className={`p-4 border rounded-xl flex items-center justify-between ${optionStyle}`}
+                        >
+                          <span className="text-gray-800">{opt.option_text}</span>
+                          <span className="text-xs font-medium">
+                            {isSel ? (isCor ? "Your answer ✓" : "Your answer") : isCor ? "Correct answer ✓" : ""}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        {/* Motivational footer */}
-        <div className="mt-8 bg-white rounded-2xl shadow-sm p-5 border border-gray-100 flex items-start">
-          <div className="rounded-full bg-indigo-100 p-2 mr-4 flex-shrink-0">
-            <FiStar className="h-5 w-5 text-indigo-600" />
-          </div>
-          <div className="text-gray-700">
-            <div className="font-medium mb-1">Review Complete!</div>
-            <p>Great work reviewing your answers! Use this insight to focus on topics that need improvement. You've got this! 💫</p>
+        {/* Motivational Footer */}
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="flex items-start">
+            <div className="bg-indigo-100 p-2 rounded-lg mr-4 flex-shrink-0">
+              <FiStar className="h-5 w-5 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-900 mb-1">Review Complete!</h3>
+              <p className="text-gray-600 text-sm">
+                Great work reviewing your answers! Use these insights to focus on areas that need improvement. 
+                Remember, every review session makes you stronger. Keep up the good work! 💫
+              </p>
+            </div>
           </div>
         </div>
       </div>

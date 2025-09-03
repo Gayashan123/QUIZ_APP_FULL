@@ -30,15 +30,24 @@ export const AuthProvider = ({ children }) => {
         });
 
         const data = res?.data ?? {};
-        let id =
-          data?.teacher?.id ??
-          data?.admin?.id ??
-          data?.student?.id ??
-          data?.id ??
-          null;
+        console.log("Auth response:", data); // Debug log
+        
+        let id = null;
+        let name = null;
+        
+        if (user.type === "student") {
+          id = data?.student?.id ?? data?.id ?? null;
+          name = data?.student?.name ?? data?.name ?? user.name ?? "Student";
+        } else if (user.type === "teacher") {
+          id = data?.teacher?.id ?? data?.id ?? null;
+          name = data?.teacher?.name ?? data?.name ?? user.name ?? "Teacher";
+        } else if (user.type === "admin") {
+          id = data?.admin?.id ?? data?.id ?? null;
+          name = data?.admin?.name ?? data?.name ?? user.name ?? "Admin";
+        }
 
         if (id) {
-          const nextUser = { ...user, id: Number(id) };
+          const nextUser = { ...user, id: Number(id), name };
           setUser(nextUser);
           localStorage.setItem("userInfo", JSON.stringify(nextUser));
         }
