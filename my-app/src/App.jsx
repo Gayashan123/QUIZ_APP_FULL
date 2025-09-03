@@ -34,6 +34,7 @@ import RequireAuth from "./pages/RequireAuth";
 import StudentQuiz from "./Student/pages/ManageStude";//Student quiz page 
 import QuizPage1 from "./Student/pages/QuizAttemptPage"
 import QuizAttemptPage from "./Student/pages/QuizAttemptPage";
+import QuizLogin from "./Student/component/PasswordLogin"; //Quiz enter password page
 
 
 function App() {
@@ -148,6 +149,8 @@ function App() {
 
  <Route path="/studentquiz" element={<QuizPage1/>} />
   <Route path="/quiz/:quizId/attempt" element={<QuizAttemptPage />} />
+   <Route path="/quiz/:quizId/login" element={<QuizLogin />} />
+     <Route path="/quiz/:quizId/review" element={<StudentQuizReview />} />
 
 
 
@@ -162,5 +165,6 @@ function App() {
     </Router>
   );
 }
+import StudentQuizReview from "./Student/pages/ResultPage";
 
 export default App;

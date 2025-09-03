@@ -6,7 +6,9 @@ use App\Http\Controllers\admin\StudentController;
 use App\Http\Controllers\admin\SubjectController;
 use App\Http\Controllers\admin\TeacherController;
 use App\Http\Controllers\studentauthController;
+use App\Http\Controllers\StudentQuizAccessController;
 use App\Http\Controllers\StudentQuizController;
+use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\teacher\OptionController;
 use App\Http\Controllers\teacher\QuestionController;
 use App\Http\Controllers\teacher\QuizController;
@@ -112,8 +114,8 @@ Route::get('adcheckauth', [AuthenticationController::class, 'checkAuth']);//admi
 Route::get('stcheckauth', [studentauthController::class, 'checkAuth']);//student check auth
 
 // Nested read routes to fetch ONLY a quiz's questions, and ONLY a question's options
-Route::get('quizzes/{quiz}/questions', [\App\Http\Controllers\teacher\QuestionController::class, 'indexByQuiz']);
-Route::get('questions/{question}/options', [\App\Http\Controllers\teacher\OptionController::class, 'indexByQuestion']);
+Route::get('quizzes/{quiz}/questions', [QuestionController::class, 'indexByQuiz']);
+Route::get('questions/{question}/options', [OptionController::class, 'indexByQuestion']);
 
 // Student Quiz Routes
 Route::get('student-quizzes', [StudentQuizController::class, 'index']);
@@ -121,10 +123,33 @@ Route::post('student-quizzes', [StudentQuizController::class, 'store']);
 Route::get('student-quizzes/{id}', [StudentQuizController::class, 'show']);
 Route::put('student-quizzes/{id}', [StudentQuizController::class, 'update']);
 Route::delete('student-quizzes/{id}', [StudentQuizController::class, 'destroy']);
-
+Route::post('student-quizzes/submit', [StudentQuizController::class, 'submit']);
 // Additional useful routes
 Route::get('students/{studentId}/quizzes', [StudentQuizController::class, 'getStudentQuizzes']);
 Route::get('quizzes/{quizId}/students', [StudentQuizController::class, 'getQuizStudents']);
+
+
+
+Route::post('quizzes/{quiz}/enter', [StudentQuizAccessController::class, 'enter']);
+// Student results management (optional for admin/teacher views)
+Route::get('student-results', [StudentResultController::class, 'index']);
+Route::post('student-results', [StudentResultController::class, 'store']);
+Route::get('student-results/{id}', [StudentResultController::class, 'show']);
+Route::put('student-results/{id}', [StudentResultController::class, 'update']);
+Route::delete('student-results/{id}', [StudentResultController::class, 'destroy']);
+
+// Optional: bulk store if you want a standalone endpoint
+Route::post('student-results/bulk', [StudentResultController::class, 'bulkStore']);
+
+Route::get('students/{studentId}/quizzes', [StudentQuizController::class, 'getStudentQuizzes']);
+
+
+// Submit answers (requires valid attempt token)
+ Route::post('student-quizzes/submit', [StudentQuizController::class, 'submit'])
+        ->middleware('quiz.attempt');
+
+
+        Route::get('students/{studentId}/quizzes/{quizId}/review', [StudentQuizController::class, 'reviewByQuiz']);
 
 });
 

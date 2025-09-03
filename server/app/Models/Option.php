@@ -22,11 +22,7 @@ class Option extends Model
         return $this->belongsTo(Question::class);
     }
 
-    // Optional: Relation to Quiz
-    public function quiz()
-    {
-        return $this->belongsTo(Quiz::class);
-    }
+
 
 
 

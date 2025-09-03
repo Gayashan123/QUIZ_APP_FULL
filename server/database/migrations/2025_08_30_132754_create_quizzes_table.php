@@ -22,7 +22,7 @@ return new class extends Migration
     $table->integer('passing_score'); // e.g. 50 out of 100
     $table->dateTime('start_time');
     $table->dateTime('end_time');
-    $table->date('end_date');
+
     $table->timestamps();
 
      // foreign keys

@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { apiurl } from "../../Admin/common/Http";
 import Sidebar from "../component/Sidebar";
 
-/* ---------------- Helpers ---------------- */
-const normalizeBase = (base) => (typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/");
+/* Helpers */
+const normalizeBase = (base) =>
+  typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/";
 const API_ROOT = normalizeBase(apiurl);
 const API_BASE = `${API_ROOT}quizzes`;
 
@@ -15,6 +16,14 @@ const resolveToken = () => {
     return userInfo?.token || "";
   } catch {
     return "";
+  }
+};
+const resolveStudentId = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem("userInfo"));
+    return u?.id || u?.user?.id || null;
+  } catch {
+    return null;
   }
 };
 
@@ -61,9 +70,10 @@ const statusOf = (quiz, now = new Date()) => {
   return "unknown";
 };
 
-/* ---------------- Component ---------------- */
+/* Component */
 export default function StudentQuiz() {
   const [quizzes, setQuizzes] = useState([]);
+  const [attemptsMap, setAttemptsMap] = useState({}); // quizId -> {finished, score, ...}
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -78,6 +88,16 @@ export default function StudentQuiz() {
       const data = await fetchJSON(API_BASE);
       const list = Array.isArray(data) ? data : data?.data || [];
       setQuizzes(list);
+
+      // Load attempts for current student
+      const sid = resolveStudentId();
+      if (sid) {
+        const at = await fetchJSON(`${API_ROOT}students/${sid}/quizzes`);
+        const rows = Array.isArray(at?.data) ? at.data : Array.isArray(at) ? at : [];
+        const map = {};
+        for (const r of rows) map[r.quiz_id] = r; // {quiz_id, finished, score, ...}
+        setAttemptsMap(map);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load quizzes";
       setError(msg);
@@ -87,26 +107,26 @@ export default function StudentQuiz() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleAttempt = (quiz) => {
     if (!quiz?.id) {
       toast.error("Quiz ID missing!");
       return;
     }
-    navigate(`/quiz/${quiz.id}/attempt`);
+    navigate(`/quiz/${quiz.id}/login`);
+  };
+
+  const handleViewResult = (quiz) => {
+    if (!quiz?.id) return;
+    navigate(`/quiz/${quiz.id}/review`);
   };
 
   const now = useMemo(() => new Date(), [quizzes]);
 
   const filteredQuizzes = useMemo(() => {
     return quizzes
-      .filter((q) => {
-        if (statusFilter === "all") return true;
-        return statusOf(q, now) === statusFilter;
-      })
+      .filter((q) => (statusFilter === "all" ? true : statusOf(q, now) === statusFilter))
       .filter((q) => {
         if (!search) return true;
         const s = search.toLowerCase();
@@ -193,7 +213,9 @@ export default function StudentQuiz() {
                     key={quiz.id}
                     quiz={quiz}
                     now={now}
+                    attempt={attemptsMap[quiz.id]}
                     onAttempt={() => handleAttempt(quiz)}
+                    onViewResult={() => handleViewResult(quiz)}
                   />
                 ))
               )}
@@ -205,22 +227,19 @@ export default function StudentQuiz() {
   );
 }
 
-function Card({ quiz, now, onAttempt }) {
+function Card({ quiz, now, attempt, onAttempt, onViewResult }) {
   const status = statusOf(quiz, now);
-  const isAttempted = quiz.attempt_status === "completed";
-  const score =
-    quiz.score !== undefined ? `${quiz.score}/${quiz.total_marks}` : "Not graded";
+  const isCompleted = attempt?.finished === true;
+  const scoreText = attempt?.score != null ? `${attempt.score}/100` : "Not graded";
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white/80 backdrop-blur p-6 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">
-            {quiz.quiz_title}
-          </h3>
+          <h3 className="text-lg font-semibold text-slate-900">{quiz.quiz_title}</h3>
           <p className="text-sm text-slate-600">{quiz.subject?.name || "-"}</p>
         </div>
-        <Badge status={status} />
+        <Badge status={isCompleted ? "past" : status} />
       </div>
 
       <div className="space-y-3 mb-4">
@@ -232,10 +251,10 @@ function Card({ quiz, now, onAttempt }) {
           <span className="text-slate-500">Passing Score:</span>
           <span className="font-medium">{quiz.passing_score}</span>
         </div>
-        {isAttempted && (
+        {isCompleted && (
           <div className="flex justify-between text-sm">
             <span className="text-slate-500">Your Score:</span>
-            <span className="font-medium text-green-600">{score}</span>
+            <span className="font-medium text-emerald-600">{scoreText}</span>
           </div>
         )}
       </div>
@@ -245,23 +264,28 @@ function Card({ quiz, now, onAttempt }) {
         <div>Ends: {fmt(quiz.end_time)}</div>
       </div>
 
-      <button
-        onClick={onAttempt}
-        disabled={status !== "ongoing" || isAttempted}
-        className={`w-full py-2 rounded-xl font-medium transition ${
-          status === "ongoing" && !isAttempted
-            ? "bg-blue-600 text-white hover:bg-blue-700"
-            : "bg-slate-100 text-slate-400 cursor-not-allowed"
-        }`}
-      >
-        {isAttempted
-          ? "Attempted"
-          : status === "ongoing"
-          ? "Attempt Quiz"
-          : status === "upcoming"
-          ? "Not Started"
-          : "Expired"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={onAttempt}
+          disabled={status !== "ongoing" || isCompleted}
+          className={`flex-1 py-2 rounded-xl font-medium transition ${
+            status === "ongoing" && !isCompleted
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-slate-100 text-slate-400 cursor-not-allowed"
+          }`}
+        >
+          {isCompleted ? "Completed" : status === "ongoing" ? "Attempt Quiz" : status === "upcoming" ? "Not Started" : "Expired"}
+        </button>
+
+        {isCompleted && (
+          <button
+            onClick={onViewResult}
+            className="flex-1 py-2 rounded-xl font-medium bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700 transition"
+          >
+            See Result
+          </button>
+        )}
+      </div>
     </div>
   );
 }
