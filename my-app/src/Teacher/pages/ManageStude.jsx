@@ -12,10 +12,8 @@ const resolveToken = () => {
     const t = typeof tokenFromLS === "function" ? tokenFromLS() : tokenFromLS;
     if (typeof t === "string") return t;
     if (t && typeof t === "object" && typeof t.token === "string") return t.token;
-    return "";
-  } catch {
-    return "";
-  }
+  } catch {}
+  return "";
 };
 
 const makeHeaders = () => {
@@ -34,9 +32,7 @@ const fetchJSON = async (url, opts = {}) => {
     try {
       const err = await res.json();
       message = err?.message || err?.error || JSON.stringify(err);
-    } catch {
-      // ignore
-    }
+    } catch {}
     throw new Error(message);
   }
   if (res.status === 204) return null;
@@ -65,14 +61,11 @@ const toLocalDateTime = (dateString) => {
   if (!dateString) return "";
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return "";
-  
-  // Format: YYYY-MM-DDTHH:MM
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
-  
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
@@ -93,7 +86,6 @@ export default function ManageQuiz() {
   const [error, setError] = useState("");
 
   // Busy state for per-row actions
-  const [togglingId, setTogglingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editingDates, setEditingDates] = useState({});
@@ -104,7 +96,7 @@ export default function ManageQuiz() {
   const [dateTo, setDateTo] = useState(""); // yyyy-mm-dd
   const [statusFilter, setStatusFilter] = useState("all"); // all|upcoming|ongoing|past
   const [pubFilter, setPubFilter] = useState("all"); // all|published|drafts
-  const [sortBy, setSortBy] = useState("start_time"); // start_time|end_time|created_at|name|code
+  const [sortBy, setSortBy] = useState("start_time"); // start_time|end_time|created_at|name|
   const [sortAsc, setSortAsc] = useState(true);
 
   // Teacher name for Sidebar (safe fallback)
@@ -161,23 +153,6 @@ export default function ManageQuiz() {
     }
   };
 
-  const handleTogglePublish = async (quiz) => {
-    const next = !Boolean(quiz?.is_published);
-    setTogglingId(quiz.id);
-    try {
-      await fetchJSON(`${API_BASE}/${quiz.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ is_published: next }),
-      });
-      toast.success(next ? "Quiz published" : "Quiz unpublished");
-      await load();
-    } catch (e) {
-      toast.error(`Publish toggle failed: ${e.message ?? e}`);
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
   const startEditing = (quiz) => {
     setEditingId(quiz.id);
     setEditingDates({
@@ -213,7 +188,7 @@ export default function ManageQuiz() {
         method: "PUT",
         body: JSON.stringify(updates),
       });
-      
+
       toast.success("Quiz dates updated");
       setEditingId(null);
       setEditingDates({});
@@ -221,6 +196,30 @@ export default function ManageQuiz() {
     } catch (e) {
       toast.error(`Update failed: ${e.message ?? e}`);
     }
+  };
+
+  const exportVisibleCSV = () => {
+    const header = ["ID", "Title", "Start", "End", "Status", "Published"];
+    const rows = filteredSorted.map((q) => [
+      q.id,
+      q?.name || q?.quiz_title || q?.title || `Quiz #${q?.id}`,
+      q?.code || "",
+      fmt(q?.start_time || q?.start_at),
+      fmt(q?.end_time || q?.end_at),
+      statusOf(q, now),
+      q?.is_published ? "Yes" : "No",
+    ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "quizzes.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Derived
@@ -237,9 +236,11 @@ export default function ManageQuiz() {
     const to = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
 
     const withinRange = (q) => {
-      const baseDate =
-        parseDate(q.start_time || q.start_at || q.created_at || q.createdAt) || null;
-      if (!from && !to) return true;
+      const baseDate = parseDate(q.start_time || q.start_at || q.created_at || q.createdAt) || null;
+
+      // If range is set and quiz has no date, exclude
+      if ((from || to) && !baseDate) return false;
+
       if (from && baseDate && baseDate < from) return false;
       if (to && baseDate && baseDate > to) return false;
       return true;
@@ -261,10 +262,8 @@ export default function ManageQuiz() {
       if (!search) return true;
       const s = search.toLowerCase();
       return (
-        q?.name?.toLowerCase().includes(s) ||
-        q?.quiz_title?.toLowerCase().includes(s) ||
-        q?.title?.toLowerCase?.().includes(s) ||
-        q?.code?.toLowerCase?.().includes(s) ||
+        (q?.name || q?.quiz_title || q?.title || "").toLowerCase().includes(s) ||
+      
         String(q?.id || "").includes(s)
       );
     };
@@ -279,8 +278,7 @@ export default function ManageQuiz() {
           switch (sortBy) {
             case "name":
               return (q?.name || q?.quiz_title || q?.title || "").toLowerCase();
-            case "code":
-              return (q?.code || "").toLowerCase();
+         
             case "end_time":
               return parseDate(q?.end_time || q?.end_at)?.getTime() || 0;
             case "created_at":
@@ -300,7 +298,7 @@ export default function ManageQuiz() {
     return list;
   }, [quizzes, search, dateFrom, dateTo, statusFilter, pubFilter, sortBy, sortAsc, now]);
 
-  /* ========================= UI (with Sidebar) ========================= */
+  /* ========================= UI ========================= */
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       <div className="flex">
@@ -318,10 +316,19 @@ export default function ManageQuiz() {
                     Manage Quizzes
                   </h1>
                   <p className="text-slate-600">
-                    Search, publish, monitor status, edit dates, and delete quizzes.
+                    Search, monitor status, edit schedules, export, and delete quizzes.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={exportVisibleCSV}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition"
+                    disabled={loading || filteredSorted.length === 0}
+                    title="Export visible rows to CSV"
+                  >
+                    <Icon.Download className="h-4 w-4" />
+                    <span className="text-sm font-medium">Export CSV</span>
+                  </button>
                   <button
                     onClick={load}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition"
@@ -421,7 +428,7 @@ export default function ManageQuiz() {
                   <option value="end_time">End time</option>
                   <option value="created_at">Created</option>
                   <option value="name">Name</option>
-                  <option value="code">Code</option>
+                 
                 </select>
                 <button
                   className="inline-flex items-center justify-center rounded-2xl bg-white/80 backdrop-blur px-2.5 py-2 ring-1 ring-slate-200 hover:ring-slate-300 transition"
@@ -440,7 +447,7 @@ export default function ManageQuiz() {
                   <thead className="bg-slate-50/70 backdrop-blur sticky top-0 z-10">
                     <tr>
                       <Th>Title</Th>
-                      <Th>Code</Th>
+                   
                       <Th>Schedule</Th>
                       <Th>Status</Th>
                       <Th>Published</Th>
@@ -469,13 +476,13 @@ export default function ManageQuiz() {
                     ) : (
                       filteredSorted.map((q) => {
                         const title = q?.name || q?.quiz_title || q?.title || `Quiz #${q?.id}`;
-                        const code = q?.code || "—";
+                       
                         const st = statusOf(q, now);
-                        
+
                         return (
                           <tr key={q.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition">
                             <Td className="font-medium">{title}</Td>
-                            <Td className="font-mono">{code}</Td>
+                           
                             <Td>
                               {editingId === q.id ? (
                                 <div className="space-y-2">
@@ -484,7 +491,7 @@ export default function ManageQuiz() {
                                     <input
                                       type="datetime-local"
                                       value={editingDates.start_time || ""}
-                                      onChange={(e) => handleDateChange('start_time', e.target.value)}
+                                      onChange={(e) => handleDateChange("start_time", e.target.value)}
                                       className="text-xs px-2 py-1 border rounded"
                                     />
                                   </div>
@@ -493,7 +500,7 @@ export default function ManageQuiz() {
                                     <input
                                       type="datetime-local"
                                       value={editingDates.end_time || ""}
-                                      onChange={(e) => handleDateChange('end_time', e.target.value)}
+                                      onChange={(e) => handleDateChange("end_time", e.target.value)}
                                       className="text-xs px-2 py-1 border rounded"
                                     />
                                   </div>
@@ -547,12 +554,6 @@ export default function ManageQuiz() {
                             </Td>
                             <Td>
                               <div className="flex gap-2 justify-end items-center">
-                                <Switch
-                                  checked={!!q?.is_published}
-                                  onChange={() => handleTogglePublish(q)}
-                                  disabled={togglingId === q.id || editingId === q.id}
-                                  ariaLabel="Toggle publish"
-                                />
                                 <button
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
                                   onClick={() => handleDelete(q.id)}
@@ -630,7 +631,7 @@ export default function ManageQuiz() {
                             <input
                               type="datetime-local"
                               value={editingDates.start_time || ""}
-                              onChange={(e) => handleDateChange('start_time', e.target.value)}
+                              onChange={(e) => handleDateChange("start_time", e.target.value)}
                               className="flex-1 text-xs px-2 py-1 border rounded"
                             />
                           </div>
@@ -639,7 +640,7 @@ export default function ManageQuiz() {
                             <input
                               type="datetime-local"
                               value={editingDates.end_time || ""}
-                              onChange={(e) => handleDateChange('end_time', e.target.value)}
+                              onChange={(e) => handleDateChange("end_time", e.target.value)}
                               className="flex-1 text-xs px-2 py-1 border rounded"
                             />
                           </div>
@@ -673,12 +674,6 @@ export default function ManageQuiz() {
                               Edit Dates
                             </button>
                           )}
-                          <Switch
-                            checked={!!q?.is_published}
-                            onChange={() => handleTogglePublish(q)}
-                            disabled={togglingId === q.id || editingId === q.id}
-                            ariaLabel="Toggle publish"
-                          />
                           <button
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
                             onClick={() => handleDelete(q.id)}
@@ -697,7 +692,7 @@ export default function ManageQuiz() {
             </section>
 
             <p className="text-xs text-slate-500 mt-6">
-              Tip: Click "Edit dates" to modify quiz start and end times. Changes are saved immediately.
+              Tip: Click "Edit dates" to modify quiz start and end times. Export visible rows to CSV for auditing.
             </p>
           </div>
         </main>
@@ -769,28 +764,6 @@ function Segmented({ label, value, onChange, options }) {
   );
 }
 
-function Switch({ checked, onChange, disabled, ariaLabel }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={onChange}
-      disabled={disabled}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition
-        ${checked ? "bg-emerald-500" : "bg-slate-300"}
-        ${disabled ? "opacity-50 cursor-not-allowed" : "hover:brightness-105"}
-      `}
-    >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white transition
-          ${checked ? "translate-x-5" : "translate-x-1"}
-        `}
-      />
-    </button>
-  );
-}
-
 /* ========================= Icons (inline SVG) ========================= */
 const Icon = {
   Search: (props) => (
@@ -822,6 +795,11 @@ const Icon = {
   Trash: (props) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
       <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+    </svg>
+  ),
+  Download: (props) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M4 20h16M12 4v10m0 0l4-4m-4 4l-4-4" />
     </svg>
   ),
 };

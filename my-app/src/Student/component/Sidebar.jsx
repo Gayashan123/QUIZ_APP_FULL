@@ -55,8 +55,8 @@ export default function Sidebar({ studentName = "Student" }) {
   const nav = [
     { key: "dashboard", label: "Dashboard", to: "/student", icon: <FiBarChart2 />, tone: "indigo" },
     { key: "quizzes", label: "Quizzes", to: "/studentquiz", icon: <FiUsers />, tone: "emerald" },
-    { key: "analytics", label: "Analytics", to: "/student/analytics", icon: <FaChartBar />, tone: "violet" },
-    { key: "settings", label: "Settings", to: "/student/settings", icon: <FiSettings />, tone: "slate" },
+    { key: "analytics", label: "Analytics", to: "/analytics", icon: <FaChartBar />, tone: "violet" },
+    { key: "settings", label: "Settings", to: "/settings1", icon: <FiSettings />, tone: "slate" },
     { key: "logout", label: "Logout", icon: <FiLogOut />, tone: "rose", onClick: handleLogout },
   ];
 

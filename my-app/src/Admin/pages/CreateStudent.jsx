@@ -5,7 +5,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import AddStudentForm from '../components/AddStudent';
 import { apiurl, token } from '../common/Http';
-
+ import Sidebar from "../components/Sidebar";
 export default function StudentManagement() {
   const [students, setStudents] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -15,6 +15,7 @@ export default function StudentManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortAsc, setSortAsc] = useState(true);
+
 
   const headers = {
     'Content-Type': 'application/json',
@@ -127,7 +128,10 @@ export default function StudentManagement() {
     });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-white p-6">
+    <div className="flex min-h-screen bg-gray-100">
+         {/* Sidebar */}
+         <Sidebar teacherName="Admin" />
+   
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar closeOnClick pauseOnHover draggable />
       <div className="max-w-6xl mx-auto bg-white shadow-xl rounded-2xl p-6">
         <div className="flex justify-between items-center mb-6">

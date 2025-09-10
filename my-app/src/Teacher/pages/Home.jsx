@@ -1,11 +1,8 @@
 import React, { useEffect, useState, useContext, useMemo } from "react";
 import Sidebar from "../components/Sidebar";
-import TopNav from "../components/TopNav";
 import StatCard from "../components/StatCard";
 import ActionButton from "../components/ActionButton";
-import PerformanceMetric from "../components/PerformanceMetric";
 import QuizCard from "../components/QuizCard";
-import NotificationItem from "../components/NotificationItem";
 import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
 import { AuthContext } from "../../context/Auth";
 
@@ -64,110 +61,70 @@ const statusOf = (q, now = new Date()) => {
   return "unknown";
 };
 
+/* ---------------- iOS Card Wrapper ---------------- */
+const IOSCard = ({ children, className = "" }) => (
+  <div
+    className={[
+      "rounded-3xl bg-white/70 backdrop-blur-xl",
+      "border border-black/5",
+      "shadow-[0_1px_0_rgba(0,0,0,0.04),0_10px_30px_rgba(0,0,0,0.06)]",
+      "p-6",
+      className,
+    ].join(" ")}
+  >
+    {children}
+  </div>
+);
+
 /* ---------------- UI Sections ---------------- */
 const DashboardStats = ({ totalQuizzes, upcomingQuizzes, totalStudents, loading }) => (
-  <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <StatCard
-      title="Total Quizzes"
-      value={loading ? "-" : totalQuizzes}
-      change={loading ? "…" : ""}
-      icon="clipboard"
-    />
-    <StatCard
-      title="Active Students"
-      value={loading ? "-" : totalStudents}
-      change=""
-      icon="students"
-    />
-    <StatCard
-      title="Upcoming Quizzes"
-      value={loading ? "-" : upcomingQuizzes}
-      change=""
-      icon="calendar"
-    />
+  <section className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+    <IOSCard>
+      <StatCard
+        title="Total Quizzes"
+        value={loading ? "-" : totalQuizzes}
+        change=""
+        icon="clipboard"
+      />
+    </IOSCard>
+   
+    <IOSCard>
+      <StatCard
+        title="Upcoming Quizzes"
+        value={loading ? "-" : upcomingQuizzes}
+        change=""
+        icon="calendar"
+      />
+    </IOSCard>
   </section>
 );
 
 const QuickActionsPanel = () => (
-  <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <div className="flex justify-between items-center mb-6">
-      <h2 className="text-xl font-semibold">Quick Actions</h2>
-      <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-        View all
-      </button>
+  <IOSCard className="lg:col-span-2">
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-lg font-semibold text-slate-900">Quick Actions</h2>
+     
     </div>
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <ActionButton type="createQuiz" />
-      <ActionButton type="viewAnalytics" />
-      <ActionButton type="manageStudents" />
-      <ActionButton type="gradeSubmissions" />
+      
     </div>
-  </div>
-);
-
-const PerformancePanel = ({ stats, loading }) => (
-  <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <h2 className="text-xl font-semibold mb-6">Class Performance</h2>
-    {loading ? (
-      <div className="space-y-6">
-        <div className="animate-pulse h-4 bg-slate-200 rounded w-3/4" />
-        <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2" />
-        <div className="pt-4 border-t border-slate-200">
-          <div className="animate-pulse h-4 bg-slate-200 rounded w-2/3 mb-2" />
-          <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2" />
-        </div>
-      </div>
-    ) : (
-      <>
-        <PerformanceMetric
-          label="Average Score"
-          value={`${stats.averageScore}%`}
-          progress={stats.averageScore}
-          color="bg-indigo-600"
-        />
-        <PerformanceMetric
-          label="Completion Rate"
-          value={`${stats.completionRate}%`}
-          progress={stats.completionRate}
-          color="bg-emerald-600"
-        />
-        <div className="pt-4 border-t border-slate-200">
-          <p className="text-sm text-slate-600 mb-1">Top Performing Quiz</p>
-          <p className="font-medium">{stats.topPerformingQuiz}</p>
-        </div>
-      </>
-    )}
-  </div>
+  </IOSCard>
 );
 
 const RecentQuizzesPanel = ({ quizzes, loading }) => (
-  <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <h2 className="text-xl font-semibold mb-6">Recent Quizzes</h2>
+  <IOSCard className="lg:col-span-2">
+    <h2 className="text-lg font-semibold text-slate-900 mb-4">Recent Quizzes</h2>
     {loading ? (
       Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
+        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded-xl mb-3" />
       ))
     ) : quizzes.length > 0 ? (
       quizzes.map((quiz, idx) => <QuizCard key={quiz.id || idx} quiz={quiz} />)
     ) : (
       <p className="text-sm text-slate-600">No quizzes found.</p>
     )}
-  </div>
-);
-
-const NotificationsPanel = ({ notifications, loading }) => (
-  <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <h2 className="text-xl font-semibold mb-6">Notifications</h2>
-    {loading ? (
-      Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
-      ))
-    ) : notifications.length > 0 ? (
-      notifications.map((n) => <NotificationItem key={n.id} notification={n} />)
-    ) : (
-      <p className="text-sm text-slate-600">You're all caught up.</p>
-    )}
-  </div>
+  </IOSCard>
 );
 
 /* ---------------- Main Component ---------------- */
@@ -181,8 +138,6 @@ export default function TeacherHome() {
   const [quizzes, setQuizzes] = useState([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
   const [totalStudents, setTotalStudents] = useState(0);
-  const [notifications, setNotifications] = useState([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(true);
 
   // Derived
   const initials = useMemo(() => {
@@ -202,45 +157,10 @@ export default function TeacherHome() {
     return quizzes.filter((q) => statusOf(q, now) === "upcoming").length;
   }, [quizzes]);
 
-  const performanceStats = useMemo(() => {
-    const avgScores = quizzes
-      .map((q) => Number(q.average_score))
-      .filter(Number.isFinite);
-    const completionRates = quizzes
-      .map((q) => Number(q.completion_rate))
-      .filter(Number.isFinite);
-
-    const averageScore = avgScores.length
-      ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length)
-      : 0;
-    const completionRate = completionRates.length
-      ? Math.round(
-          completionRates.reduce((a, b) => a + b, 0) / completionRates.length
-        )
-      : 0;
-
-    const topQuiz =
-      [...quizzes]
-        .filter((q) => Number.isFinite(Number(q.average_score)))
-        .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] ||
-      null;
-
-    return {
-      averageScore,
-      completionRate,
-      topPerformingQuiz:
-        topQuiz?.name || topQuiz?.quiz_title || topQuiz?.title || "N/A",
-    };
-  }, [quizzes]);
-
   const recentQuizzes = useMemo(() => {
     const sorted = [...quizzes].sort((a, b) => {
-      const A =
-        parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() ||
-        0;
-      const B =
-        parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() ||
-        0;
+      const A = parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() || 0;
+      const B = parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() || 0;
       return B - A;
     });
     return sorted.slice(0, 5);
@@ -249,7 +169,6 @@ export default function TeacherHome() {
   /* -------- Load teacher info -------- */
   useEffect(() => {
     const loadTeacherInfo = async () => {
-      // 1) From localStorage (fast path)
       try {
         const userInfoStr = localStorage.getItem("userInfo");
         if (userInfoStr) {
@@ -257,19 +176,14 @@ export default function TeacherHome() {
           const nameLS =
             userInfo?.name ||
             userInfo?.user?.name ||
-            [userInfo?.first_name, userInfo?.last_name]
-              .filter(Boolean)
-              .join(" ");
+            [userInfo?.first_name, userInfo?.last_name].filter(Boolean).join(" ");
           if (nameLS?.trim()) {
             setTeacherName(nameLS.trim());
             return;
           }
         }
-      } catch {
-        // ignore and continue to API
-      }
+      } catch {}
 
-      // 2) From /checkauth
       try {
         const tk = resolveToken();
         if (!tk) return;
@@ -279,7 +193,6 @@ export default function TeacherHome() {
         if (nameFromApi) {
           setTeacherName(nameFromApi);
           const updatedUser = { ...(user || {}), name: nameFromApi };
-          // login expects an object; not a function
           login(updatedUser);
           localStorage.setItem("userInfo", JSON.stringify(updatedUser));
         }
@@ -317,49 +230,52 @@ export default function TeacherHome() {
     };
   }, []);
 
-  /* -------- Load notifications (placeholder) -------- */
+  /* -------- Load students count -------- */
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
-      setLoadingNotifications(true);
+    const loadCount = async () => {
       try {
-        const mockNotifications = [
-          { id: 1, message: "Quiz 'Math Test' has been graded", time: "2 hours ago" },
-          { id: 2, message: "New student registered for your class", time: "1 day ago" },
-          { id: 3, message: "Reminder: Physics quiz starts tomorrow", time: "2 days ago" },
-        ];
-        if (mounted) setNotifications(mockNotifications);
+        const token = resolveToken();
+        if (!token) return;
+
+        const data = await fetchJSON(`${API_ROOT}students/count`);
+        if (!mounted) return;
+
+        const count =
+          typeof data?.count === "number"
+            ? data.count
+            : typeof data?.data?.count === "number"
+            ? data.data.count
+            : 0;
+
+        setTotalStudents(count);
       } catch (err) {
-        console.error("Error fetching notifications:", err);
-      } finally {
-        if (mounted) setLoadingNotifications(false);
+        console.error("Error fetching students count:", err);
       }
     };
-    load();
+    loadCount();
     return () => {
       mounted = false;
     };
   }, []);
 
-  /* -------- Load students (placeholder) -------- */
-  useEffect(() => {
-    // Replace with real API call
-    setTotalStudents(42);
-  }, []);
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 font-sans text-slate-800 flex">
+    <div className="min-h-screen bg-[#F2F2F7] text-slate-900 flex font-sans">
+      {/* Optional soft spotlight background for depth */}
+      <div className="pointer-events-none fixed inset-0 opacity-70" aria-hidden="true">
+        <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-white blur-3xl" />
+      </div>
+
       <Sidebar teacherName={teacherName} initials={initials} />
       <main className="flex-1 overflow-auto">
-        <TopNav notifications={notifications} />
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
-          <section className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
+          <section className="mb-6">
+            {/* iOS Large Title */}
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
               {greeting}, {teacherName}
             </h1>
-            <p className="text-slate-600 mt-1">
-              Here's what's happening with your quizzes today.
-            </p>
+            <p className="text-slate-600 mt-1">Here’s what’s happening with your class.</p>
           </section>
 
           <DashboardStats
@@ -369,17 +285,9 @@ export default function TeacherHome() {
             loading={loadingQuizzes}
           />
 
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
             <QuickActionsPanel />
-            <PerformancePanel stats={performanceStats} loading={loadingQuizzes} />
-          </section>
-
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <RecentQuizzesPanel quizzes={recentQuizzes} loading={loadingQuizzes} />
-            <NotificationsPanel
-              notifications={notifications}
-              loading={loadingNotifications}
-            />
           </section>
         </div>
       </main>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaUserPlus, FaLock, FaPhone, FaEnvelope } from "react-icons/fa";
+import { FaUserPlus, FaLock, FaPhone, FaEnvelope, FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function AddStudentForm({ onAddStudent, onCancel, initialData, isEditMode }) {
   const [formData, setFormData] = useState({
@@ -11,6 +11,7 @@ export default function AddStudentForm({ onAddStudent, onCancel, initialData, is
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -50,67 +51,94 @@ export default function AddStudentForm({ onAddStudent, onCancel, initialData, is
   };
 
   return (
-    <form className="bg-white shadow-xl rounded-2xl p-6 max-w-md mx-auto space-y-5" onSubmit={handleSubmit}>
-      <h2 className="text-2xl font-semibold text-gray-900">{isEditMode ? "Update Student" : "Add New Student"}</h2>
+    <form
+      className="bg-white shadow-2xl rounded-3xl p-8 max-w-md mx-auto space-y-6 border border-gray-100"
+      onSubmit={handleSubmit}
+    >
+      <h2 className="text-3xl font-semibold text-gray-900 text-center">
+        {isEditMode ? "Update Student" : "Add New Student"}
+      </h2>
 
+      {/* Name */}
       <div className="relative">
-        <FaUserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <FaUserPlus className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
         <input
           type="text"
           name="name"
           value={formData.name}
           onChange={handleChange}
           placeholder="Full Name"
-          className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
+          className="w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition text-gray-900"
         />
         {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
       </div>
 
+      {/* Email */}
       <div className="relative">
-        <FaEnvelope className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <FaEnvelope className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
         <input
           type="email"
           name="email"
           value={formData.email}
           onChange={handleChange}
           placeholder="Email"
-          className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
+          className="w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition text-gray-900"
         />
         {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
       </div>
 
+      {/* Password with Show/Hide */}
       <div className="relative">
-        <FaLock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
         <input
-          type="password"
+          type={showPassword ? "text" : "password"}
           name="password"
           value={formData.password}
           onChange={handleChange}
           placeholder={isEditMode ? "Leave blank to keep current password" : "Password"}
-          className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
+          className="w-full pl-12 pr-12 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition text-gray-900"
         />
+        <button
+          type="button"
+          onClick={() => setShowPassword(!showPassword)}
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition"
+        >
+          {showPassword ? <FaEyeSlash /> : <FaEye />}
+        </button>
         {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
       </div>
 
+      {/* Phone */}
       <div className="relative">
-        <FaPhone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <FaPhone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
         <input
           type="text"
           name="phone"
           value={formData.phone}
           onChange={handleChange}
           placeholder="Phone Number"
-          className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
+          className="w-full pl-12 pr-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-400 focus:outline-none transition text-gray-900"
         />
         {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
       </div>
 
-      <div className="flex justify-end gap-3 pt-4">
-        <button type="button" onClick={onCancel} className="px-5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition">
+      {/* Buttons */}
+      <div className="flex justify-end gap-4 pt-6">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-6 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition font-medium"
+        >
           Cancel
         </button>
-        <button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 hover:from-blue-600 hover:to-blue-700 transition">
-          {isSubmitting && <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-5 h-5"></span>}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 font-medium shadow-md hover:from-blue-600 hover:to-blue-700 transition"
+        >
+          {isSubmitting && (
+            <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-5 h-5"></span>
+          )}
           {isEditMode ? "Update" : "Add"}
         </button>
       </div>

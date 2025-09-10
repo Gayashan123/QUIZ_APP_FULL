@@ -1,7 +1,17 @@
+// src/Teacher/pages/CreateQuiz.jsx
 import React, { useState, useEffect, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaHome, FaEye, FaEyeSlash, FaSave, FaPlusCircle, FaTrashAlt, 
-         FaUpload, FaCheckCircle, FaEdit, FaImage, FaTimes } from "react-icons/fa";
+import {
+  FaHome,
+  FaEye,
+  FaEyeSlash,
+  FaSave,
+  FaPlusCircle,
+  FaTrashAlt,
+  FaCheckCircle,
+  FaEdit,
+  FaImage,
+} from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 import {
   Grid,
@@ -28,10 +38,11 @@ import {
 } from "@mui/material";
 import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
 import { AuthContext } from "../../context/Auth";
+import PdfQuestionsUploader from "../components/PdfQuestionsUploader";
 
 const steps = ["Quiz Details", "Add Questions", "Review & Publish"];
 
-/* ------------------------- Date helpers (local, safe) ------------------------- */
+/* ------------------------- Date helpers ------------------------- */
 function parseLocalDateTime(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -41,23 +52,26 @@ function pad2(n) {
   return n.toString().padStart(2, "0");
 }
 function toLocalSqlDateTime(date) {
-  const y = date.getFullYear();
-  const m = pad2(date.getMonth() + 1);
-  const d = pad2(date.getDate());
-  const h = pad2(date.getHours());
-  const min = pad2(date.getMinutes());
-  const s = pad2(date.getSeconds());
+  const y = date.getFullYear(),
+    m = pad2(date.getMonth() + 1),
+    d = pad2(date.getDate());
+  const h = pad2(date.getHours()),
+    min = pad2(date.getMinutes()),
+    s = pad2(date.getSeconds());
   return `${y}-${m}-${d} ${h}:${min}:${s}`;
 }
 
-/* ------------------------- Utilities for teacher_id resolution ------------------------- */
+/* ------------------------- Teacher id helpers ------------------------- */
 function isLikelyJWT(t) {
   return typeof t === "string" && t.split(".").length === 3;
 }
 function base64UrlToString(b64url) {
   try {
     const base64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
     return atob(padded);
   } catch {
     return null;
@@ -100,7 +114,7 @@ function extractTeacherIdFromObject(obj) {
   return null;
 }
 
-/* ------------------------- API error helper (detailed) ------------------------- */
+/* ------------------------- API error helper ------------------------- */
 async function throwApiError(res, fallbackMsg) {
   let msg = fallbackMsg;
   try {
@@ -109,7 +123,9 @@ async function throwApiError(res, fallbackMsg) {
     if (data.errors && typeof data.errors === "object") {
       const flat = Object.entries(data.errors)
         .flatMap(([field, arr]) =>
-          Array.isArray(arr) ? arr.map((m) => `${field}: ${m}`) : [`${field}: ${arr}`]
+          Array.isArray(arr)
+            ? arr.map((m) => `${field}: ${m}`)
+            : [`${field}: ${arr}`]
         )
         .join("; ");
       if (flat) msg = `${msg} — ${flat}`;
@@ -162,14 +178,16 @@ export default function CreateQuiz() {
 
   const showSnackbar = (message, severity = "success") =>
     setSnackbar({ open: true, message, severity });
-
   const handleSnackbarClose = () =>
     setSnackbar({ open: false, message: "", severity: "success" });
 
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-        const res = await fetch(`${apiurl}subjects`, { method: "GET", headers });
+        const res = await fetch(`${apiurl}subjects`, {
+          method: "GET",
+          headers,
+        });
         if (!res.ok) await throwApiError(res, "Failed to fetch subjects");
         const data = await res.json();
         setSubjects(Array.isArray(data) ? data : data.data || []);
@@ -185,40 +203,34 @@ export default function CreateQuiz() {
     const errors = [];
     if (!quiz.quiz_title?.trim()) errors.push("Quiz title is required");
     if (!quiz.subject_id) errors.push("Subject is required");
-
     const tl = Number(quiz.time_limit);
     if (!Number.isInteger(tl) || tl <= 0)
       errors.push("Time limit must be a positive integer");
-
     const ps = Number(quiz.passing_score);
     if (!Number.isFinite(ps) || ps < 0 || ps > 100)
       errors.push("Passing score must be between 0 and 100");
-
     const startDate = parseLocalDateTime(quiz.start_time);
     const endDate = parseLocalDateTime(quiz.end_time);
     if (!startDate) errors.push("Start time is required");
     if (!endDate) errors.push("End time is required");
-
-    if (startDate && endDate) {
-      if (!(startDate.getTime() < endDate.getTime())) {
-        errors.push("End time must be after start time");
-      }
-    }
-
+    if (startDate && endDate && !(startDate.getTime() < endDate.getTime()))
+      errors.push("End time must be after start time");
     return errors.length ? errors[0] : null;
   };
 
   const validateAllQuestions = (qs) => {
     if (!qs || qs.length === 0) return "Please add at least one question";
     for (let i = 0; i < qs.length; i++) {
-      const q = qs[i];
-      const idx = i + 1;
+      const q = qs[i],
+        idx = i + 1;
       if (!q.text?.trim()) return `Question ${idx}: text is required`;
       if (!Array.isArray(q.options) || q.options.length < 2)
         return `Question ${idx}: at least 2 options are required`;
       for (let j = 0; j < q.options.length; j++) {
         if (!q.options[j]?.trim())
-          return `Question ${idx}: Option ${String.fromCharCode(65 + j)} is required`;
+          return `Question ${idx}: Option ${String.fromCharCode(
+            65 + j
+          )} is required`;
       }
       if (
         q.correctAnswer == null ||
@@ -244,7 +256,6 @@ export default function CreateQuiz() {
     }
     setActiveStep((prev) => prev + 1);
   };
-
   const handleBack = () => setActiveStep((prev) => prev - 1);
 
   const resolveTeacherId = async () => {
@@ -275,15 +286,15 @@ export default function CreateQuiz() {
         parseIdCandidate(payload?.user?.teacher_id) ||
         parseIdCandidate(payload?.user?.id);
       if (id) {
-        const raw = localStorage.getItem("userInfo");
-        if (raw) {
-          try {
+        try {
+          const raw = localStorage.getItem("userInfo");
+          if (raw) {
             const obj = JSON.parse(raw);
             const nextObj = { ...obj, teacher_id: id };
             localStorage.setItem("userInfo", JSON.stringify(nextObj));
-            if (user) login({ ...user, teacher_id: id });
-          } catch {}
-        }
+          }
+        } catch {}
+        if (user) login({ ...user, teacher_id: id });
         return id;
       }
     }
@@ -296,14 +307,14 @@ export default function CreateQuiz() {
           extractTeacherIdFromObject(data) ||
           extractTeacherIdFromObject(data?.data);
         if (id) {
-          const raw = localStorage.getItem("userInfo");
-          if (raw) {
-            try {
+          try {
+            const raw = localStorage.getItem("userInfo");
+            if (raw) {
               const obj = JSON.parse(raw);
               const nextObj = { ...obj, teacher_id: id };
               localStorage.setItem("userInfo", JSON.stringify(nextObj));
-            } catch {}
-          }
+            }
+          } catch {}
           if (user) login({ ...user, teacher_id: id });
           return id;
         }
@@ -311,7 +322,6 @@ export default function CreateQuiz() {
     } catch (e) {
       console.error("checkauth fallback failed:", e);
     }
-
     return null;
   };
 
@@ -330,9 +340,7 @@ export default function CreateQuiz() {
       headers,
       body: JSON.stringify(quizPayload),
     });
-    if (!resQuiz.ok) {
-      await throwApiError(resQuiz, "Failed to create quiz");
-    }
+    if (!resQuiz.ok) await throwApiError(resQuiz, "Failed to create quiz");
     const quizJson = await resQuiz.json();
     const quizId = pickId(quizJson);
     if (!quizId) throw new Error("Quiz created but ID not returned by API");
@@ -345,21 +353,20 @@ export default function CreateQuiz() {
         explanation: q.explanation?.trim() || null,
         image_url: q.imageUrl || null,
       };
-
       const resQuestion = await fetch(`${apiurl}questions`, {
         method: "POST",
         headers,
         body: JSON.stringify(qPayload),
       });
-      if (!resQuestion.ok) {
+      if (!resQuestion.ok)
         await throwApiError(
           resQuestion,
           `Failed to create question: "${q.text.slice(0, 40)}..."`
         );
-      }
       const qJson = await resQuestion.json();
       const questionId = pickId(qJson);
-      if (!questionId) throw new Error("Question created but ID not returned by API");
+      if (!questionId)
+        throw new Error("Question created but ID not returned by API");
 
       for (let idx = 0; idx < q.options.length; idx++) {
         const optPayload = {
@@ -372,40 +379,33 @@ export default function CreateQuiz() {
           headers,
           body: JSON.stringify(optPayload),
         });
-        if (!resOpt.ok) {
+        if (!resOpt.ok)
           await throwApiError(
             resOpt,
             `Failed to create option "${optPayload.option_text}"`
           );
-        }
       }
     }
-
     return quizId;
   };
 
   const submitQuiz = async () => {
     const detailsErr = validateQuizDetails();
     if (detailsErr) return showSnackbar(detailsErr, "error");
-
     const qErr = validateAllQuestions(quiz.questions);
     if (qErr) return showSnackbar(qErr, "error");
 
     const teacher_id = await resolveTeacherId();
-    if (!teacher_id) {
-      showSnackbar(
+    if (!teacher_id)
+      return showSnackbar(
         "Could not determine your teacher ID. Please re-login or contact support.",
         "error"
       );
-      return;
-    }
 
     const startDate = parseLocalDateTime(quiz.start_time);
     const endDate = parseLocalDateTime(quiz.end_time);
-    if (!startDate || !endDate) {
-      showSnackbar("Invalid date/time values", "error");
-      return;
-    }
+    if (!startDate || !endDate)
+      return showSnackbar("Invalid date/time values", "error");
 
     const startSql = toLocalSqlDateTime(startDate);
     const endSql = toLocalSqlDateTime(endDate);
@@ -431,13 +431,16 @@ export default function CreateQuiz() {
       setTimeout(() => navigate("/home"), 800);
     } catch (error) {
       console.error(error);
-      showSnackbar(error.message || "Failed to create quiz/questions. Please try again.", "error");
+      showSnackbar(
+        error.message || "Failed to create quiz/questions. Please try again.",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Quiz Details Step
+  // Steps
   const QuizDetailsStep = ({ quiz, setQuiz, subjects }) => {
     const handleChange = (e) => {
       const { name, value } = e.target;
@@ -452,7 +455,12 @@ export default function CreateQuiz() {
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        <Typography variant="h5" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
+        <Typography
+          variant="h5"
+          fontWeight={600}
+          color="text.primary"
+          sx={{ mb: 1 }}
+        >
           Quiz Information
         </Typography>
 
@@ -570,7 +578,6 @@ export default function CreateQuiz() {
     );
   };
 
-  // Add Questions Step
   const AddQuestionsStep = ({ quiz, setQuiz, showSnackbar }) => {
     const [currentQuestion, setCurrentQuestion] = useState({
       text: "",
@@ -581,28 +588,32 @@ export default function CreateQuiz() {
       image: null,
       imageUrl: "",
     });
-    const [isUploading, setIsUploading] = useState(false);
     const [tabValue, setTabValue] = useState(0);
     const [validationErrors, setValidationErrors] = useState({});
     const [editIndex, setEditIndex] = useState(null);
     const [imagePreview, setImagePreview] = useState("");
 
     useEffect(() => {
-      if (tabValue === 1 && editIndex !== null) {
-        resetCurrentQuestion();
-      }
+      if (tabValue === 1 && editIndex !== null) resetCurrentQuestion();
     }, [tabValue]);
 
     const handleTabChange = (event, newValue) => setTabValue(newValue);
 
     const validateQuestion = () => {
       const errors = {};
-      if (!currentQuestion.text.trim()) errors.text = "Question text is required";
-      if (!Array.isArray(currentQuestion.options) || currentQuestion.options.length < 2) {
+      if (!currentQuestion.text.trim())
+        errors.text = "Question text is required";
+      if (
+        !Array.isArray(currentQuestion.options) ||
+        currentQuestion.options.length < 2
+      ) {
         errors.options = "At least 2 options are required";
       } else {
         currentQuestion.options.forEach((opt, idx) => {
-          if (!opt.trim()) errors[`option${idx}`] = `Option ${String.fromCharCode(65 + idx)} is required`;
+          if (!opt.trim())
+            errors[`option${idx}`] = `Option ${String.fromCharCode(
+              65 + idx
+            )} is required`;
         });
       }
       if (
@@ -613,8 +624,8 @@ export default function CreateQuiz() {
         errors.correctAnswer = "Please select a valid correct answer";
       }
       const pts = Number(currentQuestion.points);
-      if (!Number.isFinite(pts) || pts < 1) errors.points = "Points must be at least 1";
-
+      if (!Number.isFinite(pts) || pts < 1)
+        errors.points = "Points must be at least 1";
       setValidationErrors(errors);
       return Object.keys(errors).length === 0;
     };
@@ -628,36 +639,42 @@ export default function CreateQuiz() {
         }
         return { ...prev, [name]: value };
       });
-      if (validationErrors[name]) {
+      if (validationErrors[name])
         setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
-      }
     };
 
     const handleOptionChange = (i, value) => {
       const newOptions = [...currentQuestion.options];
       newOptions[i] = value;
       setCurrentQuestion((prev) => ({ ...prev, options: newOptions }));
-      if (validationErrors[`option${i}`]) {
+      if (validationErrors[`option${i}`])
         setValidationErrors((prev) => ({ ...prev, [`option${i}`]: undefined }));
-      }
     };
 
     const handleCorrectAnswerChange = (e) => {
       const idx = parseInt(e.target.value, 10);
       setCurrentQuestion((prev) => ({ ...prev, correctAnswer: idx }));
-      if (validationErrors.correctAnswer) {
+      if (validationErrors.correctAnswer)
         setValidationErrors((prev) => ({ ...prev, correctAnswer: undefined }));
-      }
     };
 
     const handleImageUpload = (e) => {
       const file = e.target.files[0];
       if (file) {
-        if (!file.type.match("image.*")) return showSnackbar("Please upload an image file (JPEG, PNG)", "error");
-        if (file.size > 2 * 1024 * 1024) return showSnackbar("Image size should be less than 2MB", "error");
+        if (!file.type.match("image.*"))
+          return showSnackbar(
+            "Please upload an image file (JPEG, PNG)",
+            "error"
+          );
+        if (file.size > 2 * 1024 * 1024)
+          return showSnackbar("Image size should be less than 2MB", "error");
         const reader = new FileReader();
         reader.onloadend = () => {
-          setCurrentQuestion((prev) => ({ ...prev, image: file, imageUrl: reader.result }));
+          setCurrentQuestion((prev) => ({
+            ...prev,
+            image: file,
+            imageUrl: reader.result,
+          }));
           setImagePreview(reader.result);
         };
         reader.readAsDataURL(file);
@@ -670,21 +687,26 @@ export default function CreateQuiz() {
     };
 
     const addOption = () => {
-      if (currentQuestion.options.length < 6) {
-        setCurrentQuestion((prev) => ({ ...prev, options: [...prev.options, ""] }));
-      }
+      if (currentQuestion.options.length < 6)
+        setCurrentQuestion((prev) => ({
+          ...prev,
+          options: [...prev.options, ""],
+        }));
     };
 
     const removeOption = (index) => {
       if (currentQuestion.options.length > 2) {
-        const newOptions = currentQuestion.options.filter((_, i) => i !== index);
-        let newCorrectAnswer = currentQuestion.correctAnswer;
-        if (index === currentQuestion.correctAnswer) newCorrectAnswer = 0;
-        else if (index < currentQuestion.correctAnswer) newCorrectAnswer = currentQuestion.correctAnswer - 1;
+        const newOptions = currentQuestion.options.filter(
+          (_, i) => i !== index
+        );
+        let newCorrect = currentQuestion.correctAnswer;
+        if (index === currentQuestion.correctAnswer) newCorrect = 0;
+        else if (index < currentQuestion.correctAnswer)
+          newCorrect = currentQuestion.correctAnswer - 1;
         setCurrentQuestion((prev) => ({
           ...prev,
           options: newOptions,
-          correctAnswer: newCorrectAnswer,
+          correctAnswer: newCorrect,
         }));
       }
     };
@@ -705,9 +727,9 @@ export default function CreateQuiz() {
     };
 
     const saveQuestion = () => {
-      if (!validateQuestion()) return showSnackbar("Please fix the errors before saving", "error");
-
-      const questionToSave = {
+      if (!validateQuestion())
+        return showSnackbar("Please fix the errors before saving", "error");
+      const toSave = {
         text: currentQuestion.text.trim(),
         options: currentQuestion.options.map((o) => o.trim()),
         correctAnswer: currentQuestion.correctAnswer,
@@ -715,21 +737,24 @@ export default function CreateQuiz() {
         explanation: currentQuestion.explanation?.trim() || "",
         imageUrl: currentQuestion.image ? currentQuestion.imageUrl : "",
       };
-
       setQuiz((prev) => {
-        const updatedQuestions = [...prev.questions];
-        if (editIndex !== null) updatedQuestions[editIndex] = questionToSave;
-        else updatedQuestions.push(questionToSave);
-        return { ...prev, questions: updatedQuestions };
+        const next = [...prev.questions];
+        if (editIndex !== null) next[editIndex] = toSave;
+        else next.push(toSave);
+        return { ...prev, questions: next };
       });
-
-      showSnackbar(editIndex !== null ? "Question updated successfully" : "Question added successfully", "success");
+      showSnackbar(
+        editIndex !== null
+          ? "Question updated successfully"
+          : "Question added successfully",
+        "success"
+      );
       resetCurrentQuestion();
     };
 
     const editQuestion = (index) => {
-      const question = quiz.questions[index];
-      const clone = JSON.parse(JSON.stringify(question));
+      const q = quiz.questions[index];
+      const clone = JSON.parse(JSON.stringify(q));
       setCurrentQuestion({ ...clone, image: null });
       setImagePreview(clone.imageUrl || "");
       setEditIndex(index);
@@ -737,71 +762,85 @@ export default function CreateQuiz() {
     };
 
     const removeQuestion = (index) => {
-      setQuiz((prev) => ({ ...prev, questions: prev.questions.filter((_, i) => i !== index) }));
+      setQuiz((prev) => ({
+        ...prev,
+        questions: prev.questions.filter((_, i) => i !== index),
+      }));
       showSnackbar("Question removed", "info");
       if (editIndex === index) resetCurrentQuestion();
     };
 
-    const handleFileUpload = (event) => {
-      const file = event.target.files[0];
-      if (file && file.type === "application/pdf") {
-        setIsUploading(true);
-        setTimeout(() => {
-          const mockExtractedQuestions = [
-            {
-              text: "What is the capital of France?",
-              options: ["London", "Berlin", "Paris", "Madrid"],
-              correctAnswer: 2,
-              points: 1,
-              explanation: "Paris is the capital and most populous city of France.",
-              imageUrl: "",
-            },
-            {
-              text: "Which planet is known as the Red Planet?",
-              options: ["Venus", "Mars", "Jupiter", "Saturn"],
-              correctAnswer: 1,
-              points: 1,
-              explanation: "Mars appears reddish due to iron oxide on its surface.",
-              imageUrl: "",
-            },
-          ];
-          setQuiz((prev) => ({ ...prev, questions: [...prev.questions, ...mockExtractedQuestions] }));
-          setIsUploading(false);
-          showSnackbar(`${mockExtractedQuestions.length} questions added from PDF`, "success");
-        }, 1500);
-      } else {
-        showSnackbar("Please upload a valid PDF file", "error");
-      }
-    };
-
     return (
       <>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-          <Typography variant="h5" fontWeight={600} color="text.primary" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 3,
+          }}
+        >
+          <Typography
+            variant="h5"
+            fontWeight={600}
+            color="text.primary"
+            sx={{ display: "flex", alignItems: "center", gap: 1 }}
+          >
             <FaPlusCircle color="#6366f1" />
             Quiz Questions
           </Typography>
-          <Chip label={`${quiz.questions.length} questions added`} color="primary" variant="outlined" />
+          <Chip
+            label={`${quiz.questions.length} questions added`}
+            color="primary"
+            variant="outlined"
+          />
         </Box>
         <Divider sx={{ mb: 3 }} />
 
-        <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }} indicatorColor="primary" textColor="primary">
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          sx={{ mb: 3 }}
+          indicatorColor="primary"
+          textColor="primary"
+        >
           <Tab label="Add Questions Manually" />
           <Tab label="Upload Questions PDF" />
         </Tabs>
 
         {tabValue === 0 && (
           <>
-            <Paper elevation={2} sx={{ p: 3, borderRadius: 3, border: "1px solid #e2e8f0", background: "#f8fafc", mb: 4 }}>
+            <Paper
+              elevation={2}
+              sx={{
+                p: 3,
+                borderRadius: 3,
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                mb: 4,
+              }}
+            >
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                {editIndex !== null ? `Edit Question ${editIndex + 1}` : "Add New Question"}
+                {editIndex !== null
+                  ? `Edit Question ${editIndex + 1}`
+                  : "Add New Question"}
               </Typography>
 
               <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 500 }}>Question Image (Optional)</Typography>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 500 }}>
+                  Question Image (Optional)
+                </Typography>
                 {imagePreview ? (
                   <Box sx={{ position: "relative", display: "inline-block" }}>
-                    <Avatar variant="rounded" src={imagePreview} sx={{ width: 150, height: 150, border: "1px solid #e0e0e0" }} />
+                    <Avatar
+                      variant="rounded"
+                      src={imagePreview}
+                      sx={{
+                        width: 150,
+                        height: 150,
+                        border: "1px solid #e0e0e0",
+                      }}
+                    />
                     <IconButton
                       onClick={removeImage}
                       size="small"
@@ -818,9 +857,18 @@ export default function CreateQuiz() {
                     </IconButton>
                   </Box>
                 ) : (
-                  <Button component="label" variant="outlined" startIcon={<FaImage />}>
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    startIcon={<FaImage />}
+                  >
                     Upload Image
-                    <input type="file" hidden accept="image/*" onChange={handleImageUpload} />
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                    />
                   </Button>
                 )}
               </Box>
@@ -841,15 +889,31 @@ export default function CreateQuiz() {
               />
 
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <FormLabel sx={{ mb: 1, fontWeight: 500 }}>Options (Select the correct answer)</FormLabel>
-                <RadioGroup name="correctAnswer" value={currentQuestion.correctAnswer} onChange={handleCorrectAnswerChange}>
+                <FormLabel sx={{ mb: 1, fontWeight: 500 }}>
+                  Options (Select the correct answer)
+                </FormLabel>
+                <RadioGroup
+                  name="correctAnswer"
+                  value={currentQuestion.correctAnswer}
+                  onChange={handleCorrectAnswerChange}
+                >
                   {currentQuestion.options.map((option, idx) => (
-                    <Box key={idx} sx={{ display: "flex", alignItems: "center", mb: 1, gap: 1 }}>
+                    <Box
+                      key={idx}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        mb: 1,
+                        gap: 1,
+                      }}
+                    >
                       <Radio value={idx} color="primary" />
                       <TextField
                         fullWidth
                         value={option}
-                        onChange={(e) => handleOptionChange(idx, e.target.value)}
+                        onChange={(e) =>
+                          handleOptionChange(idx, e.target.value)
+                        }
                         placeholder={`Option ${String.fromCharCode(65 + idx)}`}
                         variant="outlined"
                         size="small"
@@ -858,7 +922,11 @@ export default function CreateQuiz() {
                         helperText={validationErrors[`option${idx}`]}
                       />
                       {currentQuestion.options.length > 2 && (
-                        <IconButton onClick={() => removeOption(idx)} color="error" size="small">
+                        <IconButton
+                          onClick={() => removeOption(idx)}
+                          color="error"
+                          size="small"
+                        >
                           <FaTrashAlt fontSize="small" />
                         </IconButton>
                       )}
@@ -866,10 +934,17 @@ export default function CreateQuiz() {
                   ))}
                 </RadioGroup>
                 {validationErrors.correctAnswer && (
-                  <Typography variant="caption" color="error">{validationErrors.correctAnswer}</Typography>
+                  <Typography variant="caption" color="error">
+                    {validationErrors.correctAnswer}
+                  </Typography>
                 )}
                 {currentQuestion.options.length < 6 && (
-                  <Button onClick={addOption} startIcon={<FaPlusCircle />} size="small" sx={{ mt: 1 }}>
+                  <Button
+                    onClick={addOption}
+                    startIcon={<FaPlusCircle />}
+                    size="small"
+                    sx={{ mt: 1 }}
+                  >
                     Add Option
                   </Button>
                 )}
@@ -903,21 +978,33 @@ export default function CreateQuiz() {
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Button
                   variant="contained"
-                  startIcon={editIndex !== null ? <FaCheckCircle /> : <FaPlusCircle />}
+                  startIcon={
+                    editIndex !== null ? <FaCheckCircle /> : <FaPlusCircle />
+                  }
                   onClick={saveQuestion}
                   fullWidth
                   size="large"
                   sx={{
                     py: 1.5,
                     fontWeight: 600,
-                    background: "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)",
-                    "&:hover": { background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)" },
+                    background:
+                      "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)",
+                    "&:hover": {
+                      background:
+                        "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)",
+                    },
                   }}
                 >
                   {editIndex !== null ? "Update Question" : "Add Question"}
                 </Button>
                 {editIndex !== null && (
-                  <Button variant="outlined" onClick={resetCurrentQuestion} fullWidth size="large" sx={{ py: 1.5 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={resetCurrentQuestion}
+                    fullWidth
+                    size="large"
+                    sx={{ py: 1.5 }}
+                  >
                     Cancel
                   </Button>
                 )}
@@ -942,22 +1029,41 @@ export default function CreateQuiz() {
                           "&:hover": { boxShadow: "0 2px 8px rgba(0,0,0,0.1)" },
                         }}
                       >
-                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
                           <Box>
                             {q.imageUrl && (
                               <Box sx={{ mb: 2 }}>
-                                <Avatar variant="rounded" src={q.imageUrl} sx={{ width: "100%", height: 150, border: "1px solid #e0e0e0" }} />
+                                <Avatar
+                                  variant="rounded"
+                                  src={q.imageUrl}
+                                  sx={{
+                                    width: "100%",
+                                    height: 150,
+                                    border: "1px solid #e0e0e0",
+                                  }}
+                                />
                               </Box>
                             )}
-                            <Typography fontWeight={600} sx={{ mb: 1 }}>Q{i + 1}: {q.text}</Typography>
+                            <Typography fontWeight={600} sx={{ mb: 1 }}>
+                              Q{i + 1}: {q.text}
+                            </Typography>
                             <Box sx={{ ml: 1 }}>
                               {q.options.map((opt, idx) => (
                                 <Typography
                                   key={idx}
                                   variant="body2"
                                   sx={{
-                                    color: idx === q.correctAnswer ? "#4f46e5" : "#64748b",
-                                    fontWeight: idx === q.correctAnswer ? 600 : "normal",
+                                    color:
+                                      idx === q.correctAnswer
+                                        ? "#4f46e5"
+                                        : "#64748b",
+                                    fontWeight:
+                                      idx === q.correctAnswer ? 600 : "normal",
                                     display: "flex",
                                     alignItems: "center",
                                     gap: 1,
@@ -969,17 +1075,48 @@ export default function CreateQuiz() {
                               ))}
                             </Box>
                             {q.explanation && (
-                              <Typography variant="body2" sx={{ mt: 1, color: "#64748b", fontStyle: "italic" }}>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  mt: 1,
+                                  color: "#64748b",
+                                  fontStyle: "italic",
+                                }}
+                              >
                                 <strong>Explanation:</strong> {q.explanation}
                               </Typography>
                             )}
-                            <Chip label={`${q.points} point${q.points !== 1 ? "s" : ""}`} size="small" sx={{ mt: 1, background: "#e0e7ff", color: "#4f46e5" }} />
+                            <Chip
+                              label={`${q.points} point${
+                                q.points !== 1 ? "s" : ""
+                              }`}
+                              size="small"
+                              sx={{
+                                mt: 1,
+                                background: "#e0e7ff",
+                                color: "#4f46e5",
+                              }}
+                            />
                           </Box>
-                          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <IconButton onClick={() => editQuestion(i)} color="primary" size="small">
+                          <Box
+                            sx={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 1,
+                            }}
+                          >
+                            <IconButton
+                              onClick={() => editQuestion(i)}
+                              color="primary"
+                              size="small"
+                            >
                               <FaEdit fontSize="small" />
                             </IconButton>
-                            <IconButton onClick={() => removeQuestion(i)} color="error" size="small">
+                            <IconButton
+                              onClick={() => removeQuestion(i)}
+                              color="error"
+                              size="small"
+                            >
                               <FaTrashAlt fontSize="small" />
                             </IconButton>
                           </Box>
@@ -994,56 +1131,33 @@ export default function CreateQuiz() {
         )}
 
         {tabValue === 1 && (
-          <>
-            {isUploading ? (
-              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", p: 4 }}>
-                <CircularProgress size={60} thickness={4} sx={{ mb: 2 }} />
-                <Typography variant="h6" sx={{ mb: 1 }}>Processing PDF</Typography>
-                <Typography variant="body2" color="text.secondary">Extracting questions from your document...</Typography>
-              </Box>
-            ) : (
-              <Paper
-                elevation={2}
-                sx={{
-                  p: 4,
-                  borderRadius: 3,
-                  border: "2px dashed #e2e8f0",
-                  textAlign: "center",
-                  background: "#f8fafc",
-                  "&:hover": { borderColor: "#4f46e5", background: "#f0f5ff" },
-                }}
-              >
-                <FaUpload color="#4f46e5" size={48} style={{ marginBottom: '16px' }} />
-                <Typography variant="h6" sx={{ mb: 1 }}>Upload Questions PDF</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Drag and drop your PDF file here, or click to browse
-                </Typography>
-                <Button
-                  variant="contained"
-                  component="label"
-                  startIcon={<FaUpload />}
-                  sx={{
-                    background: "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)",
-                    "&:hover": { background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)" },
-                  }}
-                >
-                  Select PDF File
-                  <input type="file" hidden accept="application/pdf" onChange={handleFileUpload} />
-                </Button>
-                <Typography variant="caption" display="block" sx={{ mt: 2, color: "text.secondary" }}>
-                  Supported format: PDF (max 10MB)
-                </Typography>
-              </Paper>
-            )}
-          </>
+          <PdfQuestionsUploader
+            onExtract={(qs) => {
+              if (!qs?.length)
+                return showSnackbar(
+                  "No questions detected in the PDF",
+                  "warning"
+                );
+              setQuiz((prev) => ({
+                ...prev,
+                questions: [...prev.questions, ...qs],
+              }));
+              showSnackbar(
+                `Your PDF was parsed — ${qs.length} question(s) added`,
+                "success"
+              );
+            }}
+            maxSizeMB={10}
+          />
         )}
       </>
     );
   };
 
-  // Review Step
   const ReviewStep = ({ quiz, subjects }) => {
-    const subjectName = subjects.find((s) => `${s.id}` === `${quiz.subject_id}`)?.name || quiz.subject_id;
+    const subjectName =
+      subjects.find((s) => `${s.id}` === `${quiz.subject_id}`)?.name ||
+      quiz.subject_id;
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <Typography variant="h5" fontWeight={600} color="text.primary">
@@ -1051,43 +1165,108 @@ export default function CreateQuiz() {
         </Typography>
 
         <Paper elevation={2} sx={{ p: 4, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={600} sx={{ mb: 3, color: "#4f46e5" }}>
+          <Typography
+            variant="h6"
+            fontWeight={600}
+            sx={{ mb: 3, color: "#4f46e5" }}
+          >
             Quiz Information
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Title:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.quiz_title}</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                Title:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {quiz.quiz_title}
+              </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Subject:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{subjectName}</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                Subject:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {subjectName}
+              </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Time Limit:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.time_limit} minutes</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                Time Limit:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {quiz.time_limit} minutes
+              </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Passing Score:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.passing_score}%</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                Passing Score:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {quiz.passing_score}%
+              </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Start Time:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.start_time}</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                Start Time:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {quiz.start_time}
+              </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>End Time:</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>{quiz.end_time}</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                End Time:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {quiz.end_time}
+              </Typography>
             </Grid>
           </Grid>
         </Paper>
 
         <Paper elevation={2} sx={{ p: 4, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={600} sx={{ mb: 3, color: "#4f46e5" }}>
+          <Typography
+            variant="h6"
+            fontWeight={600}
+            sx={{ mb: 3, color: "#4f46e5" }}
+          >
             Questions ({quiz.questions.length})
           </Typography>
           {quiz.questions.map((q, i) => (
-            <Box key={i} sx={{ mb: 4, p: 3, borderRadius: 2, borderLeft: "4px solid #6366f1", background: "#f8fafc" }}>
+            <Box
+              key={i}
+              sx={{
+                mb: 4,
+                p: 3,
+                borderRadius: 2,
+                borderLeft: "4px solid #6366f1",
+                background: "#f8fafc",
+              }}
+            >
               <Typography variant="body1" fontWeight={600} sx={{ mb: 2 }}>
                 Q{i + 1}: {q.text}
               </Typography>
@@ -1097,7 +1276,8 @@ export default function CreateQuiz() {
                     key={idx}
                     variant="body2"
                     sx={{
-                      color: idx === q.correctAnswer ? "#4f46e5" : "text.secondary",
+                      color:
+                        idx === q.correctAnswer ? "#4f46e5" : "text.secondary",
                       fontWeight: idx === q.correctAnswer ? 600 : 400,
                       mb: 1,
                     }}
@@ -1106,31 +1286,35 @@ export default function CreateQuiz() {
                   </Typography>
                 ))}
               </Box>
-              <Chip 
-                label={`${q.points} point${q.points !== 1 ? "s" : ""}`} 
-                size="small" 
-                sx={{ 
-                  mt: 2, 
-                  background: "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)", 
-                  color: "#fff" 
-                }} 
+              <Chip
+                label={`${q.points} point${q.points !== 1 ? "s" : ""}`}
+                size="small"
+                sx={{
+                  mt: 2,
+                  background:
+                    "linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)",
+                  color: "#fff",
+                }}
               />
               {q.explanation && (
-                <Typography variant="body2" sx={{ mt: 2, color: "#64748b", fontStyle: "italic" }}>
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 2, color: "#64748b", fontStyle: "italic" }}
+                >
                   <strong>Explanation:</strong> {q.explanation}
                 </Typography>
               )}
               {q.imageUrl && (
                 <Box sx={{ mt: 2 }}>
-                  <Avatar 
-                    variant="rounded" 
-                    src={q.imageUrl} 
-                    sx={{ 
-                      width: 120, 
-                      height: 120, 
+                  <Avatar
+                    variant="rounded"
+                    src={q.imageUrl}
+                    sx={{
+                      width: 120,
+                      height: 120,
                       border: "1px solid #e0e0e0",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-                    }} 
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                    }}
                   />
                 </Box>
               )}
@@ -1142,7 +1326,13 @@ export default function CreateQuiz() {
   };
 
   return (
-    <Box sx={{ minHeight: "100vh", background: "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)", display: "flex" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)",
+        display: "flex",
+      }}
+    >
       <Box sx={{ flex: 1 }}>
         <Snackbar
           open={snackbar.open}
@@ -1150,51 +1340,63 @@ export default function CreateQuiz() {
           onClose={handleSnackbarClose}
           anchorOrigin={{ vertical: "top", horizontal: "right" }}
         >
-          <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: "100%" }}>
+          <Alert
+            onClose={handleSnackbarClose}
+            severity={snackbar.severity}
+            sx={{ width: "100%" }}
+          >
             {snackbar.message}
           </Alert>
         </Snackbar>
 
-        <Box sx={{ maxWidth: "1000px", mx: "auto", px: { xs: 2, sm: 3 }, py: 6 }}>
-          <Box sx={{ 
-            background: "#fff", 
-            borderRadius: 4, 
-            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)", 
-            p: { xs: 3, md: 6 }, 
-            mt: 4 
-          }}>
+        <Box
+          sx={{ maxWidth: "1000px", mx: "auto", px: { xs: 2, sm: 3 }, py: 6 }}
+        >
+          <Box
+            sx={{
+              background: "#fff",
+              borderRadius: 4,
+              boxShadow:
+                "0 10px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
+              p: { xs: 3, md: 6 },
+              mt: 4,
+            }}
+          >
             <Box sx={{ display: "flex", justifyContent: "end", mb: 4 }}>
-              <Button 
-                onClick={() => navigate("/home")} 
-                variant="outlined" 
-                startIcon={<FaHome />} 
-                sx={{ 
+              <Button
+                onClick={() => navigate("/home")}
+                variant="outlined"
+                sx={{
                   fontWeight: 600,
                   borderRadius: 2,
                   borderWidth: 2,
-                  "&:hover": { borderWidth: 2 }
+                  "&:hover": { borderWidth: 2 },
                 }}
               >
-                Home
+                <FaHome />
+                &nbsp; Home
               </Button>
             </Box>
 
-            <Box sx={{ 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "center", 
-              mb: 8,
-              position: "relative",
-              "&::after": {
-                content: '""',
-                position: "absolute",
-                bottom: -16,
-                left: 0,
-                right: 0,
-                height: "2px",
-                background: "linear-gradient(90deg, transparent 0%, #e2e8f0 50%, transparent 100%)"
-              }
-            }}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 8,
+                position: "relative",
+                "&::after": {
+                  content: '""',
+                  position: "absolute",
+                  bottom: -16,
+                  left: 0,
+                  right: 0,
+                  height: "2px",
+                  background:
+                    "linear-gradient(90deg, transparent 0%, #e2e8f0 50%, transparent 100%)",
+                },
+              }}
+            >
               {steps.map((label, index) => (
                 <Box
                   key={label}
@@ -1214,22 +1416,29 @@ export default function CreateQuiz() {
                       alignItems: "center",
                       justifyContent: "center",
                       mb: 1,
-                      background: index <= activeStep ? 
-                        "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" : 
-                        "#cbd5e1",
+                      background:
+                        index <= activeStep
+                          ? "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)"
+                          : "#cbd5e1",
                       color: index <= activeStep ? "white" : "text.secondary",
                       fontWeight: 600,
-                      boxShadow: index <= activeStep ? "0 4px 6px rgba(79, 70, 229, 0.3)" : "none"
+                      boxShadow:
+                        index <= activeStep
+                          ? "0 4px 6px rgba(79, 70, 229, 0.3)"
+                          : "none",
                     }}
                   >
                     {index + 1}
                   </Box>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      fontWeight: 600, 
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
                       textAlign: "center",
-                      color: index === activeStep ? "primary.main" : "text.secondary",
+                      color:
+                        index === activeStep
+                          ? "primary.main"
+                          : "text.secondary",
                     }}
                   >
                     {label}
@@ -1238,32 +1447,44 @@ export default function CreateQuiz() {
               ))}
             </Box>
 
-            {activeStep === 0 && <QuizDetailsStep quiz={quiz} setQuiz={setQuiz} subjects={subjects} />}
-
-            {activeStep === 1 && <AddQuestionsStep quiz={quiz} setQuiz={setQuiz} showSnackbar={showSnackbar} />}
-
+            {activeStep === 0 && (
+              <QuizDetailsStep
+                quiz={quiz}
+                setQuiz={setQuiz}
+                subjects={subjects}
+              />
+            )}
+            {activeStep === 1 && (
+              <AddQuestionsStep
+                quiz={quiz}
+                setQuiz={setQuiz}
+                showSnackbar={showSnackbar}
+              />
+            )}
             {activeStep === 2 && <ReviewStep quiz={quiz} subjects={subjects} />}
 
-            <Box sx={{ 
-              mt: 8, 
-              display: "flex", 
-              flexDirection: { xs: "column", sm: "row" }, 
-              justifyContent: "space-between", 
-              gap: 2,
-              pt: 3,
-              borderTop: "1px solid #e2e8f0"
-            }}>
+            <Box
+              sx={{
+                mt: 8,
+                display: "flex",
+                flexDirection: { xs: "column", sm: "row" },
+                justifyContent: "space-between",
+                gap: 2,
+                pt: 3,
+                borderTop: "1px solid #e2e8f0",
+              }}
+            >
               <Button
                 onClick={handleBack}
                 disabled={activeStep === 0 || isSubmitting}
                 variant="outlined"
-                sx={{ 
-                  fontWeight: 600, 
-                  px: 4, 
+                sx={{
+                  fontWeight: 600,
+                  px: 4,
                   py: 1.5,
                   borderRadius: 2,
                   borderWidth: 2,
-                  "&:hover": { borderWidth: 2 }
+                  "&:hover": { borderWidth: 2 },
                 }}
               >
                 Back
@@ -1274,16 +1495,24 @@ export default function CreateQuiz() {
                   onClick={submitQuiz}
                   disabled={isSubmitting}
                   variant="contained"
-                  startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <FaSave />}
+                  startIcon={
+                    isSubmitting ? (
+                      <CircularProgress size={18} color="inherit" />
+                    ) : (
+                      <FaSave />
+                    )
+                  }
                   sx={{
                     px: 4,
                     py: 1.5,
                     fontWeight: 600,
                     borderRadius: 2,
-                    background: "linear-gradient(90deg, #10b981 0%, #22d3ee 100%)",
-                    "&:hover": { 
-                      background: "linear-gradient(90deg, #059669 0%, #0ea5e9 100%)",
-                      boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
+                    background:
+                      "linear-gradient(90deg, #10b981 0%, #22d3ee 100%)",
+                    "&:hover": {
+                      background:
+                        "linear-gradient(90deg, #059669 0%, #0ea5e9 100%)",
+                      boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)",
                     },
                   }}
                 >
@@ -1299,10 +1528,12 @@ export default function CreateQuiz() {
                     py: 1.5,
                     fontWeight: 600,
                     borderRadius: 2,
-                    background: "linear-gradient(90deg, #6366f1 0%, #a78bfa 100%)",
-                    "&:hover": { 
-                      background: "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)",
-                      boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)"
+                    background:
+                      "linear-gradient(90deg, #6366f1 0%, #a78bfa 100%)",
+                    "&:hover": {
+                      background:
+                        "linear-gradient(90deg, #4338ca 0%, #6d28d9 100%)",
+                      boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
                     },
                   }}
                 >

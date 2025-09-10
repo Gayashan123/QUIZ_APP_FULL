@@ -139,4 +139,13 @@ class StudentController extends Controller
             'message' => 'Student deleted successfully'
         ], 200);
     }
+
+
+       public function count()
+    {
+        return response()->json([
+            'status' => true,
+            'count' => Student::count(),
+        ]);
+    }
 }

@@ -66,6 +66,7 @@ Route::get('faculties/{id}', [FacultyController::class, 'show']);
      Route::put('students/{id}', [StudentController::class, 'update']);
 Route::delete('students/{id}', [StudentController::class, 'destroy']);
 Route::get('students/{id}', [StudentController::class, 'show']);
+Route::get('students/count', [StudentController::class, 'count']);
 
 
 //Teacher Routes
@@ -150,6 +151,7 @@ Route::get('students/{studentId}/quizzes', [StudentQuizController::class, 'getSt
 
 
         Route::get('students/{studentId}/quizzes/{quizId}/review', [StudentQuizController::class, 'reviewByQuiz']);
+        Route::get('quizzes/{quizId}/students', [StudentQuizController::class, 'getQuizStudents']);
 
 });
 

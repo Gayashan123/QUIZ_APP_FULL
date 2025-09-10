@@ -35,6 +35,10 @@ import StudentQuiz from "./Student/pages/ManageStude";//Student quiz page
 import QuizPage1 from "./Student/pages/QuizAttemptPage"
 import QuizAttemptPage from "./Student/pages/QuizAttemptPage";
 import QuizLogin from "./Student/component/PasswordLogin"; //Quiz enter password page
+import AnalyticsPage from "./Student/pages/AnalyticsPage";
+import SettingsPage1 from "./Student/pages/SettingsPage";
+import StudentAnalyzeDetails from "./Teacher/pages/StudentAnalyze";
+import StudentAnalyze from "./Teacher/pages/StudentAnalyze";
 
 
 function App() {
@@ -86,6 +90,7 @@ function App() {
         
         <Route path="/grade" element={<GradeSub />} />
         <Route path="/settings" element={<SettingPage />} />
+        
 
         {/* Admin routes */}
 
@@ -147,10 +152,65 @@ function App() {
 } />
 
 
- <Route path="/studentquiz" element={<QuizPage1/>} />
-  <Route path="/quiz/:quizId/attempt" element={<QuizAttemptPage />} />
-   <Route path="/quiz/:quizId/login" element={<QuizLogin />} />
-     <Route path="/quiz/:quizId/review" element={<StudentQuizReview />} />
+<Route
+  path="/studentquiz"
+  element={
+    <RequireAuth>
+      <QuizPage1 />
+    </RequireAuth>
+  }
+/>
+
+<Route
+  path="/quiz/:quizId/attempt"
+  element={
+    <RequireAuth>
+      <QuizAttemptPage />
+    </RequireAuth>
+  }
+/>
+
+<Route
+  path="/quiz/:quizId/login"
+  element={
+    <RequireAuth>
+      <QuizLogin />
+    </RequireAuth>
+  }
+/>
+
+<Route
+  path="/quiz/:quizId/review"
+  element={
+    <RequireAuth>
+      <StudentQuizReview />
+    </RequireAuth>
+  }
+/>
+
+<Route
+  path="analytics"
+  element={
+    <RequireAuth>
+      <AnalyticsPage />
+    </RequireAuth>
+  }
+/>
+
+<Route
+  path="settings1"
+  element={
+    <RequireAuth>
+      <SettingsPage1 />
+    </RequireAuth>
+  }
+/>
+
+
+
+
+<Route path="/teacher/students/:studentId/analyze" element={<StudentAnalyzeDetails />}></Route>
+<Route path="/quizanalyze" element={<StudentAnalyze />}></Route>
 
 
 
