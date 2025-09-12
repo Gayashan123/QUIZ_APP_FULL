@@ -1,79 +1,129 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   FiBarChart2,
-  FiBook,
+  FiSliders,
   FiUsers,
+  FiPieChart,
   FiSettings,
   FiMenu,
   FiX,
   FiLogOut,
 } from "react-icons/fi";
-import { FaChartBar } from "react-icons/fa";
-import { NavLink, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/Auth";
-import NavItem from "./NavItem";
+import api from "../../Admin/common/api";
 
-export default function Sidebar({ teacherName = "Teacher" }) {
+/* Small router-aware nav item */
+function SideLink({ to, icon, label, collapsed = false, end = false, onClick }) {
+  const base =
+    "group flex items-center gap-3 px-3 py-2 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-slate-300";
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      onClick={onClick}
+      className={({ isActive }) =>
+        [
+          base,
+          "text-slate-700 hover:bg-slate-50",
+          "border border-transparent",
+          isActive ? "bg-white shadow-sm border border-slate-200" : "",
+          collapsed ? "justify-center" : "",
+        ].join(" ")
+      }
+      title={collapsed ? label : undefined}
+    >
+      {({ isActive }) => (
+        <>
+          <span
+            className={[
+              "inline-flex items-center justify-center h-9 w-9 rounded-lg border",
+              isActive
+                ? "bg-gradient-to-br from-indigo-500 to-indigo-700 text-white border-transparent shadow"
+                : "bg-white text-slate-700 border-slate-200",
+            ].join(" ")}
+            aria-hidden
+          >
+            {icon}
+          </span>
+          {!collapsed && <span className="flex-1 truncate font-medium">{label}</span>}
+          {isActive && !collapsed && (
+            <span className="ml-auto h-6 w-1.5 rounded-full bg-gradient-to-b from-indigo-500 to-indigo-700" />
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+export default function TeacherSidebar({ teacherName = "Teacher User" }) {
   const navigate = useNavigate();
   const { logout } = useContext(AuthContext);
 
-  const [collapsed, setCollapsed] = useState(false); // desktop collapse
-  const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("teacher:sidebar:collapsed") === "1"
+  );
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("teacher:sidebar:collapsed", collapsed ? "1" : "0");
+  }, [collapsed]);
 
   const initials = useMemo(() => {
     if (!teacherName) return "T";
     return teacherName
       .split(" ")
       .filter(Boolean)
-      .map((n) => n[0]?.toUpperCase())
+      .map((n) => n[0].toUpperCase())
       .slice(0, 2)
       .join("");
   }, [teacherName]);
 
+  // Spinner component
+  function Spinner({ size = "4" }) {
+    return (
+      <div
+        className={`w-${size} h-${size} border-2 border-t-2 border-t-transparent border-gray-200 rounded-full animate-spin`}
+      />
+    );
+  }
+
+  // Teacher logout
   const handleLogout = async () => {
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem("authToken");
-      if (token) {
-        await fetch("http://127.0.0.1:8000/api/telogout", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      }
-    } catch (e) {
-      console.error("Logout failed:", e);
+      await api.get("telogout"); // Teacher logout endpoint
+    } catch (err) {
+      console.error("Teacher logout failed:", err);
     } finally {
       localStorage.removeItem("authToken");
+      localStorage.removeItem("userInfo");
       logout?.();
-      navigate("/login");
+      navigate("/teacherlogin", { replace: true });
       setMobileOpen(false);
+      setIsLoading(false);
     }
   };
 
+  // Teacher nav
   const nav = [
-    { key: "dashboard", label: "Dashboard", to: "/home", icon: <FiBarChart2 />, tone: "indigo" },
-
-    { key: "students", label: "Quizzes", to: "/manage", icon: <FiUsers />, tone: "emerald" },
-    { key: "analytics", label: "Analytics", to: "/view", icon: <FaChartBar />, tone: "violet" },
-    { key: "settings", label: "Settings", to: "/settings", icon: <FiSettings />, tone: "slate" },
-    // Logout is a button (no NavLink)
-    { key: "logout", label: "Logout", icon: <FiLogOut />, tone: "rose", onClick: handleLogout },
+    { key: "dashboard", label: "Dashboard", to: "/home", icon: <FiBarChart2 /> },
+    { key: "quizzes", label: "Quizzes Control", to: "/manage", icon: <FiSliders /> },
+    { key: "studentAnalyze", label: "Student Analyze", to: "/view", icon: <FiUsers /> },
+    { key: "quizAnalyze", label: "Quiz Analyze", to: "/quizanalyze", icon: <FiPieChart /> },
+    { key: "settings", label: "Settings", to: "/settings", icon: <FiSettings /> },
   ];
 
   const Brand = (
     <div className="flex items-center gap-3">
-      <div
-        className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold"
-        aria-hidden
-      >
-        JQ
+      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-sm flex items-center justify-center text-white font-extrabold">
+        TQ
       </div>
       {!collapsed && (
         <div>
           <h1 className="text-xl font-extrabold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent leading-tight">
-            JuizzQuiz
+            TeacherQuiz
           </h1>
           <p className="text-xs text-slate-500 -mt-0.5">Teacher Portal</p>
         </div>
@@ -88,8 +138,8 @@ export default function Sidebar({ teacherName = "Teacher" }) {
           {initials}
         </div>
         {!collapsed && (
-          <div>
-            <p className="font-medium truncate max-w-[10rem]">{teacherName}</p>
+          <div className="min-w-0">
+            <p className="font-medium truncate">{teacherName}</p>
             <p className="text-xs text-slate-500">Teacher</p>
           </div>
         )}
@@ -97,8 +147,7 @@ export default function Sidebar({ teacherName = "Teacher" }) {
     </div>
   );
 
-  // Desktop Sidebar
-  const Desktop = (
+  const DesktopSidebar = (
     <aside
       className={`hidden md:flex flex-col ${
         collapsed ? "w-20" : "w-64"
@@ -115,39 +164,35 @@ export default function Sidebar({ teacherName = "Teacher" }) {
         </button>
       </div>
 
-      <nav className="flex flex-col gap-1">
-        {nav.map((item) =>
-          item.to ? (
-            <NavItem
-              key={item.key}
-              to={item.to}
-              icon={item.icon}
-              tone={item.tone}
-              collapsed={collapsed}
-              onClick={() => setMobileOpen(false)}
-            >
-              {item.label}
-            </NavItem>
-          ) : (
-            <NavItem
-              key={item.key}
-              icon={item.icon}
-              tone={item.tone}
-              collapsed={collapsed}
-              onClick={item.onClick}
-            >
-              {item.label}
-            </NavItem>
-          )
-        )}
+      <nav className="flex flex-col gap-1" aria-label="Main navigation">
+        {nav.map(({ key, ...props }) => (
+          <SideLink key={key} {...props} collapsed={collapsed} />
+        ))}
+
+        {/* Logout */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={isLoading}
+          className={`mt-2 group flex items-center gap-3 px-3 py-2 rounded-xl transition text-rose-700 hover:bg-rose-50 ${
+            collapsed ? "justify-center" : ""
+          } ${isLoading ? "opacity-60 cursor-not-allowed" : ""}`}
+          title={collapsed ? "Logout" : undefined}
+        >
+          <span className="inline-flex items-center justify-center h-9 w-9 rounded-lg border bg-white text-rose-700 border-slate-200">
+            {isLoading ? <Spinner size="4" /> : <FiLogOut />}
+          </span>
+          {!collapsed && (
+            <span className="font-medium">{isLoading ? "Logging out..." : "Logout"}</span>
+          )}
+        </button>
       </nav>
 
       {UserCard}
     </aside>
   );
 
-  // Mobile button (floating)
-  const MobileToggle = (
+  const MobileToggleButton = (
     <div className="md:hidden fixed top-4 right-4 z-50">
       <button
         onClick={() => setMobileOpen(true)}
@@ -159,17 +204,13 @@ export default function Sidebar({ teacherName = "Teacher" }) {
     </div>
   );
 
-  // Mobile Drawer
-  const Mobile = (
+  const MobileSidebar = (
     <div className={`md:hidden ${mobileOpen ? "block" : "hidden"}`}>
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
       <div
-        className="fixed inset-0 z-40 bg-black/50"
-        onClick={() => setMobileOpen(false)}
-        aria-hidden
-      />
-      <div
-        className={`fixed left-0 top-0 bottom-0 z-50 w-4/5 max-w-sm bg-white shadow-2xl p-5 flex flex-col
-        transform transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed left-0 top-0 bottom-0 z-50 w-4/5 max-w-sm bg-white shadow-2xl p-5 flex flex-col transform transition-transform duration-300 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
         role="dialog"
         aria-modal="true"
       >
@@ -178,35 +219,43 @@ export default function Sidebar({ teacherName = "Teacher" }) {
           <button
             onClick={() => setMobileOpen(false)}
             className="p-2 rounded-xl hover:bg-slate-100 transition"
-            aria-label="Close menu"
           >
             <FiX size={22} />
           </button>
         </div>
 
         <nav className="flex flex-col gap-1">
-          {nav.map((item) =>
-            item.to ? (
-              <NavItem
-                key={item.key}
-                to={item.to}
-                icon={item.icon}
-                tone={item.tone}
-                onClick={() => setMobileOpen(false)}
-              >
-                {item.label}
-              </NavItem>
-            ) : (
-              <NavItem
-                key={item.key}
-                icon={item.icon}
-                tone={item.tone}
-                onClick={item.onClick}
-              >
-                {item.label}
-              </NavItem>
-            )
-          )}
+          {nav.map((item) => (
+            <NavLink
+              key={item.key}
+              to={item.to}
+              end={item.end}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 px-3 py-2 rounded-xl transition text-slate-700 hover:bg-slate-50 ${
+                  isActive ? "bg-white shadow-sm border border-slate-200" : "border border-transparent"
+                }`
+              }
+            >
+              <span className="inline-flex items-center justify-center h-9 w-9 rounded-lg border bg-white text-slate-700 border-slate-200">
+                {item.icon}
+              </span>
+              <span className="font-medium">{item.label}</span>
+            </NavLink>
+          ))}
+
+          {/* Logout */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoading}
+            className="mt-2 group flex items-center gap-3 px-3 py-2 rounded-xl transition text-rose-700 hover:bg-rose-50 border border-transparent"
+          >
+            <span className="inline-flex items-center justify-center h-9 w-9 rounded-lg border bg-white text-rose-700 border-slate-200">
+              {isLoading ? <Spinner size="4" /> : <FiLogOut />}
+            </span>
+            <span className="font-medium">{isLoading ? "Logging out..." : "Logout"}</span>
+          </button>
         </nav>
 
         {UserCard}
@@ -216,9 +265,9 @@ export default function Sidebar({ teacherName = "Teacher" }) {
 
   return (
     <>
-      {Desktop}
-      {MobileToggle}
-      {Mobile}
+      {DesktopSidebar}
+      {MobileToggleButton}
+      {MobileSidebar}
     </>
   );
 }

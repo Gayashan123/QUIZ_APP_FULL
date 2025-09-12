@@ -69,6 +69,7 @@ Route::get('students/{id}', [StudentController::class, 'show']);
 Route::get('students/count', [StudentController::class, 'count']);
 
 
+
 //Teacher Routes
  Route::post('teachers', [TeacherController::class, 'store']);
      Route::get('teachers', [TeacherController::class, 'index']);

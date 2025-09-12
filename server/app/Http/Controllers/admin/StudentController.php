@@ -17,6 +17,8 @@ class StudentController extends Controller
     {
         $students = Student::orderBy('created_at', 'DESC')->get();
 
+
+
         return response()->json([
             'status' => true,
             'data' => $students
@@ -74,6 +76,15 @@ class StudentController extends Controller
             'data' => $student
         ], 200);
     }
+
+
+public function count()
+{
+    return response()->json([
+        'status' => true,
+        'count' => Student::count(),
+    ]);
+}
 
     /**
      * PUT/PATCH: Update a student
@@ -141,11 +152,13 @@ class StudentController extends Controller
     }
 
 
-       public function count()
-    {
-        return response()->json([
-            'status' => true,
-            'count' => Student::count(),
-        ]);
-    }
+
+
+
+
+
+
+
+
+
 }

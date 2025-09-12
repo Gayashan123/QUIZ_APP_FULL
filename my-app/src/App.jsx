@@ -37,6 +37,9 @@ import QuizAttemptPage from "./Student/pages/QuizAttemptPage";
 import QuizLogin from "./Student/component/PasswordLogin"; //Quiz enter password page
 import AnalyticsPage from "./Student/pages/AnalyticsPage";
 import SettingsPage1 from "./Student/pages/SettingsPage";
+import StudentAnalyzeDetails from "./Teacher/pages/StudentAnalyze";
+import StudentAnalyze from "./Teacher/pages/StudentAnalyze";
+
 
 function App() {
   return (
@@ -205,6 +208,9 @@ function App() {
 
 
 
+
+<Route path="/teacher/students/:studentId/analyze" element={<StudentAnalyzeDetails />}></Route>
+<Route path="/quizanalyze" element={<StudentAnalyze />}></Route>
 
 
 

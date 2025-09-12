@@ -10,6 +10,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { AuthContext } from "../context/Auth";
+import api from "../Admin/common/api";
 
 const TeacherLogin = ({ closeLogin }) => {
   const navigate = useNavigate();
@@ -31,29 +32,24 @@ const TeacherLogin = ({ closeLogin }) => {
     setIsLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/teauthenticate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: credentials.username,
-          password: credentials.password,
-        }),
+      const response = await api.post("teauthenticate", {
+        email: credentials.username,
+        password: credentials.password,
       });
 
-      const result = await res.json();
+      const result = response.data;
 
-      if (!res.ok) {
+      if (!result.token) {
         throw new Error(result.message || "Login failed");
       }
 
-      // Fixed: Set user type to "teacher" explicitly (not "teacher" || null)
-      const userData = { 
-        email: credentials.username, 
-        token: result.token, 
+      const userData = {
+        email: credentials.username,
+        token: result.token,
         type: "teacher",
-        id: result.teacher?.id || null
+        id: result.teacher?.id || null,
       };
-      
+
       login(userData);
 
       if (rememberMe) {
@@ -62,7 +58,11 @@ const TeacherLogin = ({ closeLogin }) => {
 
       navigate("/home");
     } catch (err) {
-      setError(err.message);
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.message || "Server error");
+      } else {
+        setError(err.message || "Login failed");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -86,18 +86,13 @@ const TeacherLogin = ({ closeLogin }) => {
       </p>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">{error}</div>
       )}
 
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div>
-          <label
-            htmlFor="username"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Email 
+          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+            Email
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -118,10 +113,7 @@ const TeacherLogin = ({ closeLogin }) => {
         </div>
 
         <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
             Password
           </label>
           <div className="relative">
@@ -145,11 +137,7 @@ const TeacherLogin = ({ closeLogin }) => {
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
               disabled={isLoading}
             >
-              {showPassword ? (
-                <EyeSlashIcon className="h-5 w-5" />
-              ) : (
-                <EyeIcon className="h-5 w-5" />
-              )}
+              {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
             </button>
           </div>
         </div>

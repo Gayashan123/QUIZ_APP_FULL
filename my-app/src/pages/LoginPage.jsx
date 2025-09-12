@@ -67,6 +67,34 @@ const Home = () => {
           </p>
 
           <div className="flex flex-col gap-4">
+            
+             <motion.button
+              onClick={() => setShowAdminModal(true)}
+              className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white py-2.5 rounded-2xl shadow-sm"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+            >
+              <FaUserShield /> Admin Login
+            </motion.button>
+
+             <motion.button
+              onClick={() => setShowTeacherModal(true)}
+              className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-2xl shadow-sm"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+            >
+              <FaChalkboardTeacher /> Teacher Login
+            </motion.button>
+
+
+
+            
+            
+            
+            
+            
             <motion.button
               onClick={() => setShowStudentModal(true)}
               className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-2xl shadow-sm"
@@ -77,25 +105,8 @@ const Home = () => {
               <FaSignInAlt /> Student Login
             </motion.button>
 
-            <motion.button
-              onClick={() => setShowAdminModal(true)}
-              className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white py-2.5 rounded-2xl shadow-sm"
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-            >
-              <FaUserShield /> Admin Login
-            </motion.button>
-
-            <motion.button
-              onClick={() => setShowTeacherModal(true)}
-              className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-2xl shadow-sm"
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-            >
-              <FaChalkboardTeacher /> Teacher Login
-            </motion.button>
+           
+           
           </div>
         </div>
       </div>

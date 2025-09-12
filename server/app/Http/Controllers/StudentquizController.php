@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Question;
 use App\Models\Student_result;
 use App\Models\StudentQuiz;
 use Illuminate\Http\Request;
@@ -9,6 +10,46 @@ use Illuminate\Support\Facades\DB;
 
 class StudentQuizController extends Controller
 {
+
+
+    public function getQuizStudents(Request $request, int $quizId)
+{
+    // Load attempts for this quiz with the student relation (id, name, email)
+    $query = StudentQuiz::with(['student:id,name,email'])
+        ->where('quiz_id', $quizId)
+        ->orderByDesc('finished_at')
+        ->orderByDesc('id');
+
+    // Optional: restrict to the authenticated teacher’s quizzes only
+    // Uncomment if you want to ensure a teacher only sees their own quiz attempts.
+    // $query->whereHas('quiz', function ($q) use ($request) {
+    //     $q->where('teacher_id', optional($request->user())->id);
+    // });
+
+    $attempts = $query->get([
+        'id',
+        'student_id',
+        'quiz_id',
+        'score',
+        'finished',
+        'finished_at',
+        'created_at',
+    ]);
+
+    // Frontend expects either a raw array or a "students" key; we provide "students"
+    return response()->json([
+        'status'   => true,
+        'students' => $attempts,
+    ]);
+}
+
+
+
+
+
+
+
+
     public function index()
     {
         $studentQuizzes = StudentQuiz::with(['student', 'quiz.subject'])->get();
@@ -185,7 +226,7 @@ public function reviewByQuiz(Request $request, int $studentId, int $quizId)
         ->keyBy('question_id');
 
     // Fetch questions + options (expose is_correct in review only)
-    $questions = \App\Models\Question::where('quiz_id', $quizId)
+    $questions = Question::where('quiz_id', $quizId)
         ->with(['options' => function ($q) {
             $q->select('id', 'question_id', 'option_text', 'is_correct')->orderBy('id');
         }])

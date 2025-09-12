@@ -1,173 +1,122 @@
-import React, { useEffect, useState, useContext, useMemo } from "react";
-import Sidebar from "../components/Sidebar";
-import TopNav from "../components/TopNav";
-import StatCard from "../components/StatCard";
-import ActionButton from "../components/ActionButton";
-import PerformanceMetric from "../components/PerformanceMetric";
-import QuizCard from "../components/QuizCard";
-import NotificationItem from "../components/NotificationItem";
-import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
+import React, { useEffect, useState, useContext, useMemo, lazy, Suspense } from "react";
 import { AuthContext } from "../../context/Auth";
+import api from "../../Admin/common/api";
 
-/* ---------------- Helpers ---------------- */
-const normalizeBase = (base) =>
-  typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/";
-const API_ROOT = normalizeBase(apiurl);
+// Lazy load components
+const Sidebar = lazy(() => import("../components/Sidebar"));
+const StatCard = lazy(() => import("../components/StatCard"));
+const ActionButton = lazy(() => import("../components/ActionButton"));
+const QuizCard = lazy(() => import("../components/QuizCard"));
 
-const resolveToken = () => {
-  try {
-    const t = typeof tokenFromLS === "function" ? tokenFromLS() : tokenFromLS;
-    if (typeof t === "string") return t;
-    if (t && typeof t === "object" && typeof t.token === "string") return t.token;
-  } catch (error) {
-    console.error("Error resolving token:", error);
-  }
-  try {
-    const ls = localStorage.getItem("authToken");
-    return typeof ls === "string" ? ls : "";
-  } catch (error) {
-    console.error("Error accessing localStorage:", error);
-    return "";
-  }
-};
+// Loading component
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center py-12">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+  </div>
+);
 
-const makeHeaders = () => {
-  const h = new Headers();
-  h.set("Accept", "application/json");
-  h.set("Content-Type", "application/json");
-  const tk = resolveToken();
-  if (tk) h.set("Authorization", `Bearer ${tk}`);
-  return h;
-};
+// Error display component
+const ErrorMessage = ({ message, onRetry }) => (
+  <div className="rounded-xl bg-red-50 p-4 mb-4">
+    <div className="text-red-700 text-sm">{message}</div>
+    {onRetry && (
+      <button
+        onClick={onRetry}
+        className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-sm"
+      >
+        Try Again
+      </button>
+    )}
+  </div>
+);
 
-const fetchJSON = async (url, opts = {}) => {
-  try {
-    const res = await fetch(url, { ...opts, headers: makeHeaders() });
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(errorText || `HTTP ${res.status}`);
-    }
-    return res.status === 204 ? null : res.json();
-  } catch (error) {
-    console.error(`API call failed for ${url}:`, error);
-    throw error;
-  }
-};
-
-const parseDate = (v) => (v ? new Date(v) : null);
-const statusOf = (q, now = new Date()) => {
-  const s = parseDate(q?.start_time || q?.start_at);
-  const e = parseDate(q?.end_time || q?.end_at);
-  if (s && now < s) return "upcoming";
-  if (s && e && now >= s && now <= e) return "ongoing";
-  if (e && now > e) return "past";
-  return "unknown";
-};
+/* ---------------- iOS Card Wrapper ---------------- */
+const IOSCard = ({ children, className = "" }) => (
+  <div
+    className={[
+      "rounded-3xl bg-white/70 backdrop-blur-xl",
+      "border border-black/5",
+      "shadow-[0_1px_0_rgba(0,0,0,0.04),0_10px_30px_rgba(0,0,0,0.06)]",
+      "p-6",
+      className,
+    ].join(" ")}
+  >
+    {children}
+  </div>
+);
 
 /* ---------------- UI Sections ---------------- */
 const DashboardStats = ({ totalQuizzes, upcomingQuizzes, totalStudents, loading }) => (
-  <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <StatCard
-      title="Total Quizzes"
-      value={loading ? "-" : totalQuizzes}
-      change={loading ? "…" : ""}
-      icon="clipboard"
-    />
-    <StatCard
-      title="Active Students"
-      value={loading ? "-" : totalStudents}
-      change=""
-      icon="students"
-    />
-    <StatCard
-      title="Upcoming Quizzes"
-      value={loading ? "-" : upcomingQuizzes}
-      change=""
-      icon="calendar"
-    />
+  <section className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+    <IOSCard>
+      <Suspense fallback={<div className="h-24 bg-gray-200 animate-pulse rounded-xl"></div>}>
+        <StatCard
+          title="Total Quizzes"
+          value={loading ? "-" : totalQuizzes}
+          change=""
+          icon="clipboard"
+        />
+      </Suspense>
+    </IOSCard>
+   
+    <IOSCard>
+      <Suspense fallback={<div className="h-24 bg-gray-200 animate-pulse rounded-xl"></div>}>
+        <StatCard
+          title="Upcoming Quizzes"
+          value={loading ? "-" : upcomingQuizzes}
+          change=""
+          icon="calendar"
+        />
+      </Suspense>
+    </IOSCard>
+    
+    <IOSCard>
+      <Suspense fallback={<div className="h-24 bg-gray-200 animate-pulse rounded-xl"></div>}>
+        <StatCard
+          title="Total Students"
+          value={loading ? "-" : totalStudents}
+          change=""
+          icon="users"
+        />
+      </Suspense>
+    </IOSCard>
   </section>
 );
 
 const QuickActionsPanel = () => (
-  <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <div className="flex justify-between items-center mb-6">
-      <h2 className="text-xl font-semibold">Quick Actions</h2>
-      <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-        View all
-      </button>
+  <IOSCard className="lg:col-span-2">
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-lg font-semibold text-slate-900">Quick Actions</h2>
     </div>
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <ActionButton type="createQuiz" />
-      <ActionButton type="viewAnalytics" />
-      <ActionButton type="manageStudents" />
-      <ActionButton type="gradeSubmissions" />
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Suspense fallback={<div className="h-12 bg-gray-200 animate-pulse rounded-md"></div>}>
+        <ActionButton type="createQuiz" />
+      </Suspense>
     </div>
-  </div>
+  </IOSCard>
 );
 
-const PerformancePanel = ({ stats, loading }) => (
-  <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <h2 className="text-xl font-semibold mb-6">Class Performance</h2>
-    {loading ? (
-      <div className="space-y-6">
-        <div className="animate-pulse h-4 bg-slate-200 rounded w-3/4" />
-        <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2" />
-        <div className="pt-4 border-t border-slate-200">
-          <div className="animate-pulse h-4 bg-slate-200 rounded w-2/3 mb-2" />
-          <div className="animate-pulse h-4 bg-slate-200 rounded w-1/2" />
-        </div>
-      </div>
-    ) : (
-      <>
-        <PerformanceMetric
-          label="Average Score"
-          value={`${stats.averageScore}%`}
-          progress={stats.averageScore}
-          color="bg-indigo-600"
-        />
-        <PerformanceMetric
-          label="Completion Rate"
-          value={`${stats.completionRate}%`}
-          progress={stats.completionRate}
-          color="bg-emerald-600"
-        />
-        <div className="pt-4 border-t border-slate-200">
-          <p className="text-sm text-slate-600 mb-1">Top Performing Quiz</p>
-          <p className="font-medium">{stats.topPerformingQuiz}</p>
-        </div>
-      </>
-    )}
-  </div>
-);
-
-const RecentQuizzesPanel = ({ quizzes, loading }) => (
-  <div className="lg:col-span-2 bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <h2 className="text-xl font-semibold mb-6">Recent Quizzes</h2>
-    {loading ? (
+const RecentQuizzesPanel = ({ quizzes, loading, error, onRetry }) => (
+  <IOSCard className="lg:col-span-2">
+    <h2 className="text-lg font-semibold text-slate-900 mb-4">Recent Quizzes</h2>
+    {error ? (
+      <ErrorMessage message={error} onRetry={onRetry} />
+    ) : loading ? (
       Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
+        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded-xl mb-3" />
       ))
     ) : quizzes.length > 0 ? (
-      quizzes.map((quiz, idx) => <QuizCard key={quiz.id || idx} quiz={quiz} />)
+      <Suspense fallback={<div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="animate-pulse h-16 bg-slate-200 rounded-xl" />
+        ))}
+      </div>}>
+        {quizzes.map((quiz, idx) => <QuizCard key={quiz.id || idx} quiz={quiz} />)}
+      </Suspense>
     ) : (
       <p className="text-sm text-slate-600">No quizzes found.</p>
     )}
-  </div>
-);
-
-const NotificationsPanel = ({ notifications, loading }) => (
-  <div className="bg-white/80 backdrop-blur rounded-3xl shadow-sm border border-slate-200 p-6">
-    <h2 className="text-xl font-semibold mb-6">Notifications</h2>
-    {loading ? (
-      Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="animate-pulse h-12 bg-slate-200 rounded mb-4" />
-      ))
-    ) : notifications.length > 0 ? (
-      notifications.map((n) => <NotificationItem key={n.id} notification={n} />)
-    ) : (
-      <p className="text-sm text-slate-600">You're all caught up.</p>
-    )}
-  </div>
+  </IOSCard>
 );
 
 /* ---------------- Main Component ---------------- */
@@ -180,9 +129,10 @@ export default function TeacherHome() {
   // Data state
   const [quizzes, setQuizzes] = useState([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  const [quizError, setQuizError] = useState(null);
   const [totalStudents, setTotalStudents] = useState(0);
-  const [notifications, setNotifications] = useState([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [studentError, setStudentError] = useState(null);
 
   // Derived
   const initials = useMemo(() => {
@@ -199,49 +149,25 @@ export default function TeacherHome() {
 
   const upcomingQuizzes = useMemo(() => {
     const now = new Date();
-    return quizzes.filter((q) => statusOf(q, now) === "upcoming").length;
-  }, [quizzes]);
-
-  const performanceStats = useMemo(() => {
-    const avgScores = quizzes
-      .map((q) => Number(q.average_score))
-      .filter(Number.isFinite);
-    const completionRates = quizzes
-      .map((q) => Number(q.completion_rate))
-      .filter(Number.isFinite);
-
-    const averageScore = avgScores.length
-      ? Math.round(avgScores.reduce((a, b) => a + b, 0) / avgScores.length)
-      : 0;
-    const completionRate = completionRates.length
-      ? Math.round(
-          completionRates.reduce((a, b) => a + b, 0) / completionRates.length
-        )
-      : 0;
-
-    const topQuiz =
-      [...quizzes]
-        .filter((q) => Number.isFinite(Number(q.average_score)))
-        .sort((a, b) => Number(b.average_score) - Number(a.average_score))[0] ||
-      null;
-
-    return {
-      averageScore,
-      completionRate,
-      topPerformingQuiz:
-        topQuiz?.name || topQuiz?.quiz_title || topQuiz?.title || "N/A",
-    };
+    return quizzes.filter((q) => {
+      const startTime = q?.start_time || q?.start_at;
+      const endTime = q?.end_time || q?.end_at;
+      if (!startTime) return false;
+      
+      const startDate = new Date(startTime);
+      const endDate = endTime ? new Date(endTime) : null;
+      
+      if (now < startDate) return true; // Upcoming
+      if (endDate && now <= endDate) return false; // Ongoing
+      return false; // Past
+    }).length;
   }, [quizzes]);
 
   const recentQuizzes = useMemo(() => {
     const sorted = [...quizzes].sort((a, b) => {
-      const A =
-        parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() ||
-        0;
-      const B =
-        parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() ||
-        0;
-      return B - A;
+      const dateA = new Date(a.created_at || a.createdAt || a.start_time || a.start_at || 0);
+      const dateB = new Date(b.created_at || b.createdAt || b.start_time || b.start_at || 0);
+      return dateB - dateA;
     });
     return sorted.slice(0, 5);
   }, [quizzes]);
@@ -249,7 +175,6 @@ export default function TeacherHome() {
   /* -------- Load teacher info -------- */
   useEffect(() => {
     const loadTeacherInfo = async () => {
-      // 1) From localStorage (fast path)
       try {
         const userInfoStr = localStorage.getItem("userInfo");
         if (userInfoStr) {
@@ -257,128 +182,119 @@ export default function TeacherHome() {
           const nameLS =
             userInfo?.name ||
             userInfo?.user?.name ||
-            [userInfo?.first_name, userInfo?.last_name]
-              .filter(Boolean)
-              .join(" ");
+            [userInfo?.first_name, userInfo?.last_name].filter(Boolean).join(" ");
           if (nameLS?.trim()) {
             setTeacherName(nameLS.trim());
             return;
           }
         }
-      } catch {
-        // ignore and continue to API
+      } catch (error) {
+        // Silently handle error for user info parsing
       }
 
-      // 2) From /checkauth
       try {
-        const tk = resolveToken();
-        if (!tk) return;
-        const data = await fetchJSON(`${API_ROOT}checkauth`);
+        const response = await api.get("checkauth");
+        const data = response.data;
         const nameFromApi =
           data?.teacher?.name || data?.data?.name || data?.user?.name || data?.name || null;
         if (nameFromApi) {
           setTeacherName(nameFromApi);
           const updatedUser = { ...(user || {}), name: nameFromApi };
-          // login expects an object; not a function
           login(updatedUser);
           localStorage.setItem("userInfo", JSON.stringify(updatedUser));
         }
       } catch (error) {
-        console.error("Error loading teacher info:", error);
+        // Silently handle error for auth check
       }
     };
     loadTeacherInfo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once
+  }, [user, login]);
 
   /* -------- Load quizzes -------- */
+  const loadQuizzes = async () => {
+    setLoadingQuizzes(true);
+    setQuizError(null);
+    try {
+      const response = await api.get("quizzes");
+      const data = response.data;
+      const list = Array.isArray(data) ? data : data?.data || [];
+      setQuizzes(list);
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || "Failed to load quizzes";
+      setQuizError(errorMessage);
+    } finally {
+      setLoadingQuizzes(false);
+    }
+  };
+
   useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoadingQuizzes(true);
-      try {
-        const token = resolveToken();
-        if (!token) return;
-
-        const data = await fetchJSON(`${API_ROOT}quizzes`);
-        if (!mounted) return;
-
-        const list = Array.isArray(data) ? data : data?.data || [];
-        setQuizzes(list);
-      } catch (err) {
-        console.error("Error fetching quizzes:", err);
-      } finally {
-        if (mounted) setLoadingQuizzes(false);
-      }
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
+    loadQuizzes();
   }, []);
 
-  /* -------- Load notifications (placeholder) -------- */
+  /* -------- Load students count -------- */
+  const loadStudentsCount = async () => {
+  setLoadingStudents(true);
+  setStudentError(null);
+  try {
+    const response = await api.get("students"); // fetch all students
+    const studentsArray = response.data.data || []; // get the array
+    setTotalStudents(studentsArray.length); // array length = total students
+  } catch (err) {
+    const errorMessage =
+      err.response?.data?.message || err.message || "Failed to load student count";
+    setStudentError(errorMessage);
+  } finally {
+    setLoadingStudents(false);
+  }
+};
+
+
   useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoadingNotifications(true);
-      try {
-        const mockNotifications = [
-          { id: 1, message: "Quiz 'Math Test' has been graded", time: "2 hours ago" },
-          { id: 2, message: "New student registered for your class", time: "1 day ago" },
-          { id: 3, message: "Reminder: Physics quiz starts tomorrow", time: "2 days ago" },
-        ];
-        if (mounted) setNotifications(mockNotifications);
-      } catch (err) {
-        console.error("Error fetching notifications:", err);
-      } finally {
-        if (mounted) setLoadingNotifications(false);
-      }
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
+    loadStudentsCount();
   }, []);
 
-  /* -------- Load students (placeholder) -------- */
-  useEffect(() => {
-    // Replace with real API call
-    setTotalStudents(42);
-  }, []);
+  const loading = loadingQuizzes || loadingStudents;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 font-sans text-slate-800 flex">
-      <Sidebar teacherName={teacherName} initials={initials} />
+    <div className="min-h-screen bg-[#F2F2F7] text-slate-900 flex font-sans">
+      {/* Optional soft spotlight background for depth */}
+      <div className="pointer-events-none fixed inset-0 opacity-70" aria-hidden="true">
+        <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-white blur-3xl" />
+      </div>
+
+      <Suspense fallback={<div className="w-64 bg-gray-800"></div>}>
+        <Sidebar teacherName={teacherName} initials={initials} />
+      </Suspense>
+      
       <main className="flex-1 overflow-auto">
-        <TopNav notifications={notifications} />
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
-          <section className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
+          <section className="mb-6">
+            {/* iOS Large Title */}
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
               {greeting}, {teacherName}
             </h1>
-            <p className="text-slate-600 mt-1">
-              Here's what's happening with your quizzes today.
-            </p>
+            <p className="text-slate-600 mt-1">Here's what's happening with your class.</p>
           </section>
+
+          {studentError && (
+            <ErrorMessage message={studentError} onRetry={loadStudentsCount} />
+          )}
 
           <DashboardStats
             totalQuizzes={totalQuizzes}
             upcomingQuizzes={upcomingQuizzes}
             totalStudents={totalStudents}
-            loading={loadingQuizzes}
+            loading={loading}
           />
 
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
             <QuickActionsPanel />
-            <PerformancePanel stats={performanceStats} loading={loadingQuizzes} />
-          </section>
-
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <RecentQuizzesPanel quizzes={recentQuizzes} loading={loadingQuizzes} />
-            <NotificationsPanel
-              notifications={notifications}
-              loading={loadingNotifications}
+            <RecentQuizzesPanel 
+              quizzes={recentQuizzes} 
+              loading={loadingQuizzes} 
+              error={quizError}
+              onRetry={loadQuizzes}
             />
           </section>
         </div>

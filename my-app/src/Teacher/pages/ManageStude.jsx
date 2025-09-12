@@ -1,51 +1,21 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  lazy,
+  Suspense,
+} from "react";
 import { toast } from "react-toastify";
-import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
-import Sidebar from "../components/Sidebar";
+import api from "../../Admin/common/api";
+
+// Lazy-load the sidebar for faster initial paint
+const Sidebar = lazy(() => import("../components/Sidebar"));
 
 /* ========================= Utilities ========================= */
-const normalizeBase = (base) => base?.replace(/\/?$/, "/") || "/";
-const API_BASE = `${normalizeBase(apiurl)}quizzes`;
-
-const resolveToken = () => {
-  try {
-    const t = typeof tokenFromLS === "function" ? tokenFromLS() : tokenFromLS;
-    if (typeof t === "string") return t;
-    if (t && typeof t === "object" && typeof t.token === "string") return t.token;
-    return "";
-  } catch {
-    return "";
-  }
-};
-
-const makeHeaders = () => {
-  const h = new Headers();
-  h.set("Accept", "application/json");
-  h.set("Content-Type", "application/json");
-  const tk = resolveToken();
-  if (tk) h.set("Authorization", `Bearer ${tk}`);
-  return h;
-};
-
-const fetchJSON = async (url, opts = {}) => {
-  const res = await fetch(url, { ...opts, headers: makeHeaders() });
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const err = await res.json();
-      message = err?.message || err?.error || JSON.stringify(err);
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-};
-
 const parseDate = (v) => (v ? new Date(v) : null);
 const fmt = (d) => {
-  if (!d) return "-";
+  if (!d) return "—";
   try {
     const date = typeof d === "string" ? new Date(d) : d;
     return new Intl.DateTimeFormat(undefined, {
@@ -65,15 +35,14 @@ const toLocalDateTime = (dateString) => {
   if (!dateString) return "";
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return "";
-  
-  // Format: YYYY-MM-DDTHH:MM
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const h = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+
+  return `${y}-${m}-${d}T${h}:${min}`;
 };
 
 const statusOf = (quiz, now = new Date()) => {
@@ -85,15 +54,53 @@ const statusOf = (quiz, now = new Date()) => {
   return "unknown";
 };
 
+const extractApiError = (error) => {
+  const data = error?.response?.data;
+  if (data) {
+    if (typeof data === "string") return data;
+    if (data.message) return data.message;
+    if (data.error) return data.error;
+    if (data.errors) {
+      try {
+        return Object.values(data.errors).flat().join(" ");
+      } catch {
+        return "Validation failed";
+      }
+    }
+  }
+  return error?.message || "Request failed";
+};
+
+/* ========================= Error Boundary ========================= */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {}
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-red-700 bg-red-50 border border-red-200 rounded-2xl">
+          Something went wrong. Please refresh the page.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /* ========================= Component ========================= */
 export default function ManageQuiz() {
   // Data
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   // Busy state for per-row actions
-  const [togglingId, setTogglingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editingDates, setEditingDates] = useState({});
@@ -103,8 +110,7 @@ export default function ManageQuiz() {
   const [dateFrom, setDateFrom] = useState(""); // yyyy-mm-dd
   const [dateTo, setDateTo] = useState(""); // yyyy-mm-dd
   const [statusFilter, setStatusFilter] = useState("all"); // all|upcoming|ongoing|past
-  const [pubFilter, setPubFilter] = useState("all"); // all|published|drafts
-  const [sortBy, setSortBy] = useState("start_time"); // start_time|end_time|created_at|name|code
+  const [sortBy, setSortBy] = useState("start_time"); // start_time|end_time|created_at|name
   const [sortAsc, setSortAsc] = useState(true);
 
   // Teacher name for Sidebar (safe fallback)
@@ -113,123 +119,106 @@ export default function ManageQuiz() {
       const raw = localStorage.getItem("userInfo");
       if (raw) {
         const obj = JSON.parse(raw);
-        return (
+        const name =
           obj?.name ||
           obj?.user?.name ||
-          `${obj?.first_name || ""} ${obj?.last_name || ""}`.trim() ||
-          "Teacher"
-        );
+          `${obj?.first_name || ""} ${obj?.last_name || ""}`.trim();
+        return name || "Teacher";
       }
     } catch {}
     return "Teacher";
   }, []);
 
+  const RESOURCE = "quizzes";
+
   // Fetch list
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setErrorMsg("");
     try {
-      const data = await fetchJSON(API_BASE);
+      const { data } = await api.get(RESOURCE);
       const list = Array.isArray(data) ? data : data?.data || [];
       setQuizzes(list);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load quizzes";
-      setError(msg);
+      const msg = extractApiError(e);
+      setErrorMsg(msg);
       toast.error(`Error: ${msg}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   // Actions
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this quiz? This cannot be undone.")) return;
-    setDeletingId(id);
-    try {
-      await fetchJSON(`${API_BASE}/${id}`, { method: "DELETE" });
-      toast.success("Quiz deleted");
-      await load();
-    } catch (e) {
-      toast.error(`Delete failed: ${e.message ?? e}`);
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  const handleDelete = useCallback(
+    async (id) => {
+      if (!window.confirm("Delete this quiz? This cannot be undone.")) return;
+      setDeletingId(id);
+      try {
+        await api.delete(`${RESOURCE}/${id}`);
+        toast.success("Quiz deleted");
+        await load();
+      } catch (e) {
+        toast.error(`Delete failed: ${extractApiError(e)}`);
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [load]
+  );
 
-  const handleTogglePublish = async (quiz) => {
-    const next = !Boolean(quiz?.is_published);
-    setTogglingId(quiz.id);
-    try {
-      await fetchJSON(`${API_BASE}/${quiz.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ is_published: next }),
-      });
-      toast.success(next ? "Quiz published" : "Quiz unpublished");
-      await load();
-    } catch (e) {
-      toast.error(`Publish toggle failed: ${e.message ?? e}`);
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  const startEditing = (quiz) => {
+  const startEditing = useCallback((quiz) => {
     setEditingId(quiz.id);
     setEditingDates({
       start_time: toLocalDateTime(quiz.start_time || quiz.start_at),
-      end_time: toLocalDateTime(quiz.end_time || quiz.end_at)
+      end_time: toLocalDateTime(quiz.end_time || quiz.end_at),
     });
-  };
+  }, []);
 
-  const cancelEditing = () => {
+  const cancelEditing = useCallback(() => {
     setEditingId(null);
     setEditingDates({});
-  };
+  }, []);
 
-  const handleDateChange = (field, value) => {
-    setEditingDates(prev => ({
+  const handleDateChange = useCallback((field, value) => {
+    setEditingDates((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
-  };
+  }, []);
 
-  const saveDateChanges = async (quizId) => {
-    try {
-      // Convert back to ISO format for API
-      const updates = {};
-      if (editingDates.start_time) {
-        updates.start_time = new Date(editingDates.start_time).toISOString();
+  const saveDateChanges = useCallback(
+    async (quizId) => {
+      try {
+        const updates = {};
+        if (editingDates.start_time) {
+          updates.start_time = new Date(editingDates.start_time).toISOString();
+        }
+        if (editingDates.end_time) {
+          updates.end_time = new Date(editingDates.end_time).toISOString();
+        }
+        await api.put(`${RESOURCE}/${quizId}`, updates);
+        toast.success("Quiz dates updated");
+        setEditingId(null);
+        setEditingDates({});
+        await load();
+      } catch (e) {
+        toast.error(`Update failed: ${extractApiError(e)}`);
       }
-      if (editingDates.end_time) {
-        updates.end_time = new Date(editingDates.end_time).toISOString();
-      }
-
-      await fetchJSON(`${API_BASE}/${quizId}`, {
-        method: "PUT",
-        body: JSON.stringify(updates),
-      });
-      
-      toast.success("Quiz dates updated");
-      setEditingId(null);
-      setEditingDates({});
-      await load();
-    } catch (e) {
-      toast.error(`Update failed: ${e.message ?? e}`);
-    }
-  };
+    },
+    [editingDates, load]
+  );
 
   // Derived
   const now = useMemo(() => new Date(), [quizzes]);
   const stats = useMemo(() => {
     const total = quizzes.length;
-    const published = quizzes.filter((q) => q?.is_published).length;
     const ongoing = quizzes.filter((q) => statusOf(q, now) === "ongoing").length;
-    return { total, published, ongoing };
+    const upcoming = quizzes.filter((q) => statusOf(q, now) === "upcoming").length;
+    return { total, ongoing, upcoming };
   }, [quizzes, now]);
 
   const filteredSorted = useMemo(() => {
@@ -238,7 +227,8 @@ export default function ManageQuiz() {
 
     const withinRange = (q) => {
       const baseDate =
-        parseDate(q.start_time || q.start_at || q.created_at || q.createdAt) || null;
+        parseDate(q.start_time || q.start_at || q.created_at || q.createdAt) ||
+        null;
       if (!from && !to) return true;
       if (from && baseDate && baseDate < from) return false;
       if (to && baseDate && baseDate > to) return false;
@@ -250,21 +240,13 @@ export default function ManageQuiz() {
       return statusOf(q, now) === statusFilter;
     };
 
-    const matchesPub = (q) => {
-      if (pubFilter === "all") return true;
-      if (pubFilter === "published") return Boolean(q?.is_published);
-      if (pubFilter === "drafts") return !Boolean(q?.is_published);
-      return true;
-    };
-
     const matchesSearch = (q) => {
       if (!search) return true;
       const s = search.toLowerCase();
       return (
-        q?.name?.toLowerCase().includes(s) ||
-        q?.quiz_title?.toLowerCase().includes(s) ||
+        q?.name?.toLowerCase?.().includes(s) ||
+        q?.quiz_title?.toLowerCase?.().includes(s) ||
         q?.title?.toLowerCase?.().includes(s) ||
-        q?.code?.toLowerCase?.().includes(s) ||
         String(q?.id || "").includes(s)
       );
     };
@@ -272,15 +254,12 @@ export default function ManageQuiz() {
     const list = quizzes
       .filter(withinRange)
       .filter(matchesStatus)
-      .filter(matchesPub)
       .filter(matchesSearch)
       .sort((a, b) => {
         const get = (q) => {
           switch (sortBy) {
             case "name":
               return (q?.name || q?.quiz_title || q?.title || "").toLowerCase();
-            case "code":
-              return (q?.code || "").toLowerCase();
             case "end_time":
               return parseDate(q?.end_time || q?.end_at)?.getTime() || 0;
             case "created_at":
@@ -298,387 +277,416 @@ export default function ManageQuiz() {
       });
 
     return list;
-  }, [quizzes, search, dateFrom, dateTo, statusFilter, pubFilter, sortBy, sortAsc, now]);
+  }, [quizzes, search, dateFrom, dateTo, statusFilter, sortBy, sortAsc, now]);
 
   /* ========================= UI (with Sidebar) ========================= */
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="flex">
-        {/* Left Sidebar */}
-        <Sidebar teacherName={teacherName} />
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+        <div className="flex">
+          {/* Left Sidebar (lazy loaded) */}
+          <Suspense
+            fallback={
+              <div className="w-64 p-6">
+                <div className="h-6 w-28 bg-slate-200 rounded animate-pulse mb-4" />
+                <div className="h-4 w-40 bg-slate-200 rounded animate-pulse" />
+              </div>
+            }
+          >
+            <Sidebar teacherName={teacherName} />
+          </Suspense>
 
-        {/* Main content */}
-        <main className="flex-1">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {/* Header */}
-            <header className="mb-8">
-              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                <div>
-                  <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                    Manage Quizzes
-                  </h1>
-                  <p className="text-slate-600">
-                    Search, publish, monitor status, edit dates, and delete quizzes.
-                  </p>
+          {/* Main content */}
+          <main className="flex-1">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              {/* Header */}
+              <header className="mb-8">
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                  <div>
+                    <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                      Manage Quizzes
+                    </h1>
+                    <p className="text-slate-600">
+                      Search, update schedules, and delete quizzes.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={load}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition"
+                      disabled={loading}
+                      aria-label="Refresh list"
+                    >
+                      <Icon.Refresh
+                        className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                      />
+                      <span className="text-sm font-medium">
+                        {loading ? "Refreshing…" : "Refresh"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={load}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition"
-                    disabled={loading}
+              </header>
+
+              {/* Stats */}
+              <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <StatCard label="Total" value={stats.total} />
+                <StatCard label="Upcoming" value={stats.upcoming} />
+                <StatCard label="Ongoing" value={stats.ongoing} />
+              </section>
+
+              {/* Filters */}
+              <section
+                className="mb-6 grid grid-cols-1 md:grid-cols-12 gap-3"
+                aria-label="Filters"
+              >
+                {/* Search */}
+                <div className="md:col-span-3 relative">
+                  <Icon.Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    className="w-full rounded-2xl bg-white/80 backdrop-blur px-10 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition"
+                    placeholder="Search by title or ID…"
+                    aria-label="Search quizzes"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+
+                {/* Date range */}
+                <div className="md:col-span-4 grid grid-cols-2 gap-3">
+                  <div className="relative">
+                    <Icon.Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="date"
+                      className="w-full rounded-2xl bg-white/80 backdrop-blur px-10 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      aria-label="From date"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Icon.Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="date"
+                      className="w-full rounded-2xl bg-white/80 backdrop-blur px-10 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      aria-label="To date"
+                    />
+                  </div>
+                </div>
+
+                {/* Status segmented */}
+                <div className="md:col-span-3">
+                  <Segmented
+                    label="Status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "upcoming", label: "Upcoming" },
+                      { value: "ongoing", label: "Ongoing" },
+                      { value: "past", label: "Past" },
+                    ]}
+                  />
+                </div>
+
+                {/* Sort controls */}
+                <div className="md:col-span-0 md:col-start-12 flex items-center justify-end gap-2">
+                  <label className="sr-only" htmlFor="sortby">
+                    Sort by
+                  </label>
+                  <select
+                    id="sortby"
+                    className="rounded-2xl bg-white/80 backdrop-blur px-3 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none text-sm"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    title="Sort by"
                   >
-                    <Icon.Refresh className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                    <span className="text-sm font-medium">
-                      {loading ? "Refreshing…" : "Refresh"}
-                    </span>
+                    <option value="start_time">Start time</option>
+                    <option value="end_time">End time</option>
+                    <option value="created_at">Created</option>
+                    <option value="name">Name</option>
+                  </select>
+                  <button
+                    className="inline-flex items-center justify-center rounded-2xl bg-white/80 backdrop-blur px-2.5 py-2 ring-1 ring-slate-200 hover:ring-slate-300 transition"
+                    onClick={() => setSortAsc((s) => !s)}
+                    title="Toggle sort order"
+                    aria-label="Toggle sort order"
+                    aria-pressed={sortAsc}
+                  >
+                    {sortAsc ? (
+                      <Icon.SortAsc className="h-4 w-4" />
+                    ) : (
+                      <Icon.SortDesc className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
-              </div>
-            </header>
+              </section>
 
-            {/* Stats */}
-            <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-              <StatCard label="Total" value={stats.total} />
-              <StatCard label="Published" value={stats.published} />
-              <StatCard label="Ongoing" value={stats.ongoing} />
-            </section>
-
-            {/* Filters */}
-            <section className="mb-6 grid grid-cols-1 md:grid-cols-12 gap-3">
-              {/* Search */}
-              <div className="md:col-span-3 relative">
-                <Icon.Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  className="w-full rounded-2xl bg-white/80 backdrop-blur px-10 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition"
-                  placeholder="Search by title/code/id…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-
-              {/* Date range */}
-              <div className="md:col-span-4 grid grid-cols-2 gap-3">
-                <div className="relative">
-                  <Icon.Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <input
-                    type="date"
-                    className="w-full rounded-2xl bg-white/80 backdrop-blur px-10 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    aria-label="From date"
-                  />
-                </div>
-                <div className="relative">
-                  <Icon.Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <input
-                    type="date"
-                    className="w-full rounded-2xl bg-white/80 backdrop-blur px-10 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    aria-label="To date"
-                  />
-                </div>
-              </div>
-
-              {/* Status segmented */}
-              <div className="md:col-span-3">
-                <Segmented
-                  label="Status"
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  options={[
-                    { value: "all", label: "All" },
-                    { value: "upcoming", label: "Upcoming" },
-                    { value: "ongoing", label: "Ongoing" },
-                    { value: "past", label: "Past" },
-                  ]}
-                />
-              </div>
-
-              {/* Publish segmented */}
-              <div className="md:col-span-2">
-                <Segmented
-                  label="Visibility"
-                  value={pubFilter}
-                  onChange={setPubFilter}
-                  options={[
-                    { value: "all", label: "All" },
-                    { value: "published", label: "Published" },
-                    { value: "drafts", label: "Drafts" },
-                  ]}
-                />
-              </div>
-
-              {/* Sort controls */}
-              <div className="md:col-span-0 md:col-start-12 flex items-center justify-end gap-2">
-                <select
-                  className="rounded-2xl bg-white/80 backdrop-blur px-3 py-2 ring-1 ring-slate-200 focus:ring-2 focus:ring-slate-400 outline-none text-sm"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  title="Sort by"
-                >
-                  <option value="start_time">Start time</option>
-                  <option value="end_time">End time</option>
-                  <option value="created_at">Created</option>
-                  <option value="name">Name</option>
-                  <option value="code">Code</option>
-                </select>
-                <button
-                  className="inline-flex items-center justify-center rounded-2xl bg-white/80 backdrop-blur px-2.5 py-2 ring-1 ring-slate-200 hover:ring-slate-300 transition"
-                  onClick={() => setSortAsc((s) => !s)}
-                  title="Toggle sort order"
-                >
-                  {sortAsc ? <Icon.SortAsc className="h-4 w-4" /> : <Icon.SortDesc className="h-4 w-4" />}
-                </button>
-              </div>
-            </section>
-
-            {/* Desktop Table */}
-            <section className="hidden md:block bg-white/80 backdrop-blur border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50/70 backdrop-blur sticky top-0 z-10">
-                    <tr>
-                      <Th>Title</Th>
-                      <Th>Code</Th>
-                      <Th>Schedule</Th>
-                      <Th>Status</Th>
-                      <Th>Published</Th>
-                      <Th className="text-right">Actions</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <>
-                        <SkeletonRow />
-                        <SkeletonRow />
-                        <SkeletonRow />
-                      </>
-                    ) : error ? (
+              {/* Desktop Table */}
+              <section className="hidden md:block bg-white/80 backdrop-blur border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50/70 backdrop-blur sticky top-0 z-10">
                       <tr>
-                        <td className="p-6 text-red-600" colSpan={6}>
-                          {error}
-                        </td>
+                        <Th>Title</Th>
+                        <Th>Schedule</Th>
+                        <Th>Status</Th>
+                        <Th className="text-right">Actions</Th>
                       </tr>
-                    ) : filteredSorted.length === 0 ? (
-                      <tr>
-                        <td className="p-6 text-slate-600" colSpan={6}>
-                          No quizzes found.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredSorted.map((q) => {
-                        const title = q?.name || q?.quiz_title || q?.title || `Quiz #${q?.id}`;
-                        const code = q?.code || "—";
-                        const st = statusOf(q, now);
-                        
-                        return (
-                          <tr key={q.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition">
-                            <Td className="font-medium">{title}</Td>
-                            <Td className="font-mono">{code}</Td>
-                            <Td>
-                              {editingId === q.id ? (
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <label className="text-xs text-slate-500 w-12">Start:</label>
-                                    <input
-                                      type="datetime-local"
-                                      value={editingDates.start_time || ""}
-                                      onChange={(e) => handleDateChange('start_time', e.target.value)}
-                                      className="text-xs px-2 py-1 border rounded"
-                                    />
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <>
+                          <SkeletonRow cols={4} />
+                          <SkeletonRow cols={4} />
+                          <SkeletonRow cols={4} />
+                        </>
+                      ) : errorMsg ? (
+                        <tr>
+                          <td className="p-6 text-red-600" colSpan={4}>
+                            {errorMsg}
+                          </td>
+                        </tr>
+                      ) : filteredSorted.length === 0 ? (
+                        <tr>
+                          <td className="p-6 text-slate-600" colSpan={4}>
+                            No quizzes found.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredSorted.map((q) => {
+                          const title =
+                            q?.name ||
+                            q?.quiz_title ||
+                            q?.title ||
+                            `Quiz #${q?.id}`;
+                          const st = statusOf(q, now);
+
+                          return (
+                            <tr
+                              key={q.id}
+                              className="border-t border-slate-100 hover:bg-slate-50/50 transition"
+                            >
+                              <Td className="font-medium">{title}</Td>
+                              <Td>
+                                {editingId === q.id ? (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-xs text-slate-500 w-12">
+                                        Start:
+                                      </label>
+                                      <input
+                                        type="datetime-local"
+                                        value={editingDates.start_time || ""}
+                                        onChange={(e) =>
+                                          handleDateChange(
+                                            "start_time",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="text-xs px-2 py-1 border rounded"
+                                        aria-label="Start date time"
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-xs text-slate-500 w-12">
+                                        End:
+                                      </label>
+                                      <input
+                                        type="datetime-local"
+                                        value={editingDates.end_time || ""}
+                                        onChange={(e) =>
+                                          handleDateChange(
+                                            "end_time",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="text-xs px-2 py-1 border rounded"
+                                        aria-label="End date time"
+                                      />
+                                    </div>
+                                    <div className="flex gap-2 mt-1">
+                                      <button
+                                        onClick={() => saveDateChanges(q.id)}
+                                        className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={cancelEditing}
+                                        className="text-xs px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <label className="text-xs text-slate-500 w-12">End:</label>
-                                    <input
-                                      type="datetime-local"
-                                      value={editingDates.end_time || ""}
-                                      onChange={(e) => handleDateChange('end_time', e.target.value)}
-                                      className="text-xs px-2 py-1 border rounded"
-                                    />
-                                  </div>
-                                  <div className="flex gap-2 mt-1">
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    <div className="text-slate-900">
+                                      {fmt(q.start_time || q.start_at)}
+                                    </div>
+                                    <div className="text-slate-500 text-xs">
+                                      to {fmt(q.end_time || q.end_at)}
+                                    </div>
                                     <button
-                                      onClick={() => saveDateChanges(q.id)}
-                                      className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                      onClick={() => startEditing(q)}
+                                      className="text-xs text-blue-600 hover:text-blue-800 mt-1"
                                     >
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={cancelEditing}
-                                      className="text-xs px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
-                                    >
-                                      Cancel
+                                      Edit dates
                                     </button>
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-0.5">
-                                  <div className="text-slate-900">{fmt(q.start_time || q.start_at)}</div>
-                                  <div className="text-slate-500 text-xs">to {fmt(q.end_time || q.end_at)}</div>
+                                )}
+                              </Td>
+                              <Td>
+                                <Badge
+                                  tone={
+                                    st === "ongoing"
+                                      ? "green"
+                                      : st === "upcoming"
+                                      ? "blue"
+                                      : st === "past"
+                                      ? "gray"
+                                      : "amber"
+                                  }
+                                >
+                                  {st}
+                                </Badge>
+                              </Td>
+                              <Td>
+                                <div className="flex gap-2 justify-end items-center">
                                   <button
-                                    onClick={() => startEditing(q)}
-                                    className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
+                                    onClick={() => handleDelete(q.id)}
+                                    disabled={deletingId === q.id || editingId === q.id}
+                                    title="Delete quiz"
                                   >
-                                    Edit dates
+                                    <Icon.Trash className="h-4 w-4" />
+                                    <span>
+                                      {deletingId === q.id ? "Deleting…" : "Delete"}
+                                    </span>
                                   </button>
                                 </div>
-                              )}
-                            </Td>
-                            <Td>
-                              <Badge
-                                tone={
-                                  st === "ongoing"
-                                    ? "green"
-                                    : st === "upcoming"
-                                    ? "blue"
-                                    : st === "past"
-                                    ? "gray"
-                                    : "amber"
-                                }
-                              >
-                                {st}
-                              </Badge>
-                            </Td>
-                            <Td>
-                              <Badge tone={q?.is_published ? "green" : "amber"}>
-                                {q?.is_published ? "Published" : "Draft"}
-                              </Badge>
-                            </Td>
-                            <Td>
-                              <div className="flex gap-2 justify-end items-center">
-                                <Switch
-                                  checked={!!q?.is_published}
-                                  onChange={() => handleTogglePublish(q)}
-                                  disabled={togglingId === q.id || editingId === q.id}
-                                  ariaLabel="Toggle publish"
-                                />
-                                <button
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
-                                  onClick={() => handleDelete(q.id)}
-                                  disabled={deletingId === q.id || editingId === q.id}
-                                  title="Delete quiz"
-                                >
-                                  <Icon.Trash className="h-4 w-4" />
-                                  <span>{deletingId === q.id ? "Deleting…" : "Delete"}</span>
-                                </button>
-                              </div>
-                            </Td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            {/* Mobile Cards */}
-            <section className="md:hidden space-y-3">
-              {loading ? (
-                <>
-                  <SkeletonCard />
-                  <SkeletonCard />
-                </>
-              ) : error ? (
-                <div className="rounded-3xl border border-red-200 bg-white/80 backdrop-blur p-4 text-red-700">
-                  {error}
-                </div>
-              ) : filteredSorted.length === 0 ? (
-                <div className="rounded-3xl border border-slate-200 bg-white/80 backdrop-blur p-4 text-slate-700">
-                  No quizzes found.
-                </div>
-              ) : (
-                filteredSorted.map((q) => {
-                  const title = q?.name || q?.quiz_title || q?.title || `Quiz #${q?.id}`;
-                  const code = q?.code || "—";
-                  const st = statusOf(q, now);
-                  return (
-                    <div
-                      key={q.id}
-                      className="rounded-3xl border border-slate-200 bg-white/80 backdrop-blur p-4 shadow-sm hover:shadow-md transition"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-base font-semibold text-slate-900">{title}</div>
-                          <div className="text-xs text-slate-500 font-mono mt-0.5">Code: {code}</div>
-                        </div>
-                        <Badge
-                          tone={
-                            st === "ongoing" ? "green" : st === "upcoming" ? "blue" : st === "past" ? "gray" : "amber"
-                          }
-                        >
-                          {st}
-                        </Badge>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                        <div className="rounded-2xl bg-slate-50 border border-slate-100 px-3 py-2">
-                          <div className="text-xs text-slate-500">Start</div>
-                          <div className="text-slate-900">{fmt(q.start_time || q.start_at)}</div>
-                        </div>
-                        <div className="rounded-2xl bg-slate-50 border border-slate-100 px-3 py-2">
-                          <div className="text-xs text-slate-500">End</div>
-                          <div className="text-slate-900">{fmt(q.end_time || q.end_at)}</div>
-                        </div>
-                      </div>
-
-                      {editingId === q.id && (
-                        <div className="mt-3 p-3 bg-slate-50 rounded-2xl space-y-2">
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs text-slate-600 w-12">Start:</label>
-                            <input
-                              type="datetime-local"
-                              value={editingDates.start_time || ""}
-                              onChange={(e) => handleDateChange('start_time', e.target.value)}
-                              className="flex-1 text-xs px-2 py-1 border rounded"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs text-slate-600 w-12">End:</label>
-                            <input
-                              type="datetime-local"
-                              value={editingDates.end_time || ""}
-                              onChange={(e) => handleDateChange('end_time', e.target.value)}
-                              className="flex-1 text-xs px-2 py-1 border rounded"
-                            />
-                          </div>
-                          <div className="flex gap-2 mt-2">
-                            <button
-                              onClick={() => saveDateChanges(q.id)}
-                              className="flex-1 text-xs px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEditing}
-                              className="flex-1 text-xs px-3 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
+                              </Td>
+                            </tr>
+                          );
+                        })
                       )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
 
-                      <div className="mt-3 flex items-center justify-between">
-                        <Badge tone={q?.is_published ? "green" : "amber"}>
-                          {q?.is_published ? "Published" : "Draft"}
-                        </Badge>
-                        <div className="flex items-center gap-2">
-                          {editingId !== q.id && (
-                            <button
-                              onClick={() => startEditing(q)}
-                              className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded"
-                            >
-                              Edit Dates
-                            </button>
-                          )}
-                          <Switch
-                            checked={!!q?.is_published}
-                            onChange={() => handleTogglePublish(q)}
-                            disabled={togglingId === q.id || editingId === q.id}
-                            ariaLabel="Toggle publish"
-                          />
+              {/* Mobile Cards */}
+              <section className="md:hidden space-y-3" aria-label="Quizzes">
+                {loading ? (
+                  <>
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </>
+                ) : errorMsg ? (
+                  <div className="rounded-3xl border border-red-200 bg-white/80 backdrop-blur p-4 text-red-700">
+                    {errorMsg}
+                  </div>
+                ) : filteredSorted.length === 0 ? (
+                  <div className="rounded-3xl border border-slate-200 bg-white/80 backdrop-blur p-4 text-slate-700">
+                    No quizzes found.
+                  </div>
+                ) : (
+                  filteredSorted.map((q) => {
+                    const title =
+                      q?.name || q?.quiz_title || q?.title || `Quiz #${q?.id}`;
+                    const st = statusOf(q, now);
+                    return (
+                      <div
+                        key={q.id}
+                        className="rounded-3xl border border-slate-200 bg-white/80 backdrop-blur p-4 shadow-sm hover:shadow-md transition"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-base font-semibold text-slate-900">
+                              {title}
+                            </div>
+                          </div>
+                          <Badge
+                            tone={
+                              st === "ongoing"
+                                ? "green"
+                                : st === "upcoming"
+                                ? "blue"
+                                : st === "past"
+                                ? "gray"
+                                : "amber"
+                            }
+                          >
+                            {st}
+                          </Badge>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                          <div className="rounded-2xl bg-slate-50 border border-slate-100 px-3 py-2">
+                            <div className="text-xs text-slate-500">Start</div>
+                            <div className="text-slate-900">
+                              {fmt(q.start_time || q.start_at)}
+                            </div>
+                          </div>
+                          <div className="rounded-2xl bg-slate-50 border border-slate-100 px-3 py-2">
+                            <div className="text-xs text-slate-500">End</div>
+                            <div className="text-slate-900">
+                              {fmt(q.end_time || q.end_at)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {editingId === q.id && (
+                          <div className="mt-3 p-3 bg-slate-50 rounded-2xl space-y-2">
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-slate-600 w-12">
+                                Start:
+                              </label>
+                              <input
+                                type="datetime-local"
+                                value={editingDates.start_time || ""}
+                                onChange={(e) =>
+                                  handleDateChange("start_time", e.target.value)
+                                }
+                                className="flex-1 text-xs px-2 py-1 border rounded"
+                                aria-label="Start date time"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-slate-600 w-12">
+                                End:
+                              </label>
+                              <input
+                                type="datetime-local"
+                                value={editingDates.end_time || ""}
+                                onChange={(e) =>
+                                  handleDateChange("end_time", e.target.value)
+                                }
+                                className="flex-1 text-xs px-2 py-1 border rounded"
+                                aria-label="End date time"
+                              />
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => saveDateChanges(q.id)}
+                                className="flex-1 text-xs px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="flex-1 text-xs px-3 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-end">
                           <button
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 transition"
                             onClick={() => handleDelete(q.id)}
@@ -686,23 +694,25 @@ export default function ManageQuiz() {
                             title="Delete quiz"
                           >
                             <Icon.Trash className="h-4 w-4" />
-                            <span className="text-sm">{deletingId === q.id ? "Deleting…" : "Delete"}</span>
+                            <span className="text-sm">
+                              {deletingId === q.id ? "Deleting…" : "Delete"}
+                            </span>
                           </button>
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
-            </section>
+                    );
+                  })
+                )}
+              </section>
 
-            <p className="text-xs text-slate-500 mt-6">
-              Tip: Click "Edit dates" to modify quiz start and end times. Changes are saved immediately.
-            </p>
-          </div>
-        </main>
+              <p className="text-xs text-slate-500 mt-6">
+                Tip: Click "Edit dates" to modify quiz start and end times.
+              </p>
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 
@@ -745,7 +755,7 @@ function StatCard({ label, value }) {
 
 function Segmented({ label, value, onChange, options }) {
   return (
-    <div className="w-full">
+    <div className="w-full" role="group" aria-label={label}>
       <div className="text-xs text-slate-500 mb-1">{label}</div>
       <div className="inline-flex w-full items-center rounded-2xl bg-slate-100 p-1">
         {options.map((opt) => {
@@ -755,10 +765,11 @@ function Segmented({ label, value, onChange, options }) {
               key={opt.value}
               onClick={() => onChange(opt.value)}
               className={`flex-1 px-3 py-1.5 rounded-xl text-sm transition ${
-                active
-                  ? "bg-white shadow-sm text-slate-900"
-                  : "text-slate-600 hover:text-slate-900"
+                active ? "bg-white shadow-sm text-slate-900" : "text-slate-600 hover:text-slate-900"
               }`}
+              role="radio"
+              aria-checked={active}
+              aria-label={opt.label}
             >
               {opt.label}
             </button>
@@ -766,28 +777,6 @@ function Segmented({ label, value, onChange, options }) {
         })}
       </div>
     </div>
-  );
-}
-
-function Switch({ checked, onChange, disabled, ariaLabel }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={onChange}
-      disabled={disabled}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition
-        ${checked ? "bg-emerald-500" : "bg-slate-300"}
-        ${disabled ? "opacity-50 cursor-not-allowed" : "hover:brightness-105"}
-      `}
-    >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white transition
-          ${checked ? "translate-x-5" : "translate-x-1"}
-        `}
-      />
-    </button>
   );
 }
 
@@ -827,10 +816,10 @@ const Icon = {
 };
 
 /* ========================= Skeletons ========================= */
-function SkeletonRow() {
+function SkeletonRow({ cols = 4 }) {
   return (
     <tr className="border-t border-slate-100">
-      {[...Array(6)].map((_, i) => (
+      {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div className="h-4 w-full max-w-[180px] animate-pulse rounded bg-slate-200/70" />
         </td>
