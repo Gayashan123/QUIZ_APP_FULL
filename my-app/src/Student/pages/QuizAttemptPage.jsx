@@ -383,7 +383,7 @@ export default function QuizAttemptPage() {
 
         didManualSubmitRef.current = true;
         toast.success(`Quiz submitted! Your score: ${scorePercent}%`);
-        navigate("/studentquiz");
+        navigate("/studentquiz1");
       } catch (e) {
         const msg = extractApiError(e) || "Submission failed";
         if (!auto) {
@@ -392,7 +392,7 @@ export default function QuizAttemptPage() {
           sessionStorage.removeItem(`attemptToken:${quizId}`);
           sessionStorage.removeItem(`attemptEndAt:${quizId}`);
           toast.info("Time is up. Your attempt has ended.");
-          navigate("/studentquiz");
+          navigate("/studentquiz1");
         }
       } finally {
         if (isMountedRef.current) setSubmitting(false);

@@ -101,7 +101,7 @@ export default function StudentSidebar({ studentName = "Student User" }) {
 
   const nav = [
     { key: "dashboard", label: "Dashboard", to: "/student", icon: <FiBarChart2 /> },
-    { key: "quizzes", label: "Quizzes", to: "/studentquiz", icon: <FiUsers /> },
+    { key: "quizzes", label: "Quizzes", to: "/studentquiz1", icon: <FiUsers /> },
     { key: "analytics", label: "Analytics", to: "/analytics", icon: <FaChartBar /> },
     { key: "settings", label: "Settings", to: "/settings1", icon: <FiSettings /> },
   ];
