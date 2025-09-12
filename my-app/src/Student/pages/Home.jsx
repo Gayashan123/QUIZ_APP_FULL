@@ -1,10 +1,9 @@
 // src/Student/pages/Home.jsx
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import { AuthContext } from "../../context/Auth";
-import { apiurl } from "../../Admin/common/Http";
 import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../../context/Auth";
 import Sidebar from "../component/Sidebar";
+import api from "../../Admin/common/api";
 import {
   FaSearch,
   FaBell,
@@ -23,6 +22,63 @@ import {
   FaClock,
 } from "react-icons/fa";
 
+/* ===================== Utils ===================== */
+const extractApiError = (e) =>
+  e?.response?.data?.message ||
+  e?.response?.data?.error ||
+  (e?.response?.data?.errors ? Object.values(e.response.data.errors).flat().join(" ") : "") ||
+  e?.message ||
+  "Request failed";
+
+/* ============= Normalization Utils ============= */
+function normalizeQuizzes(items) {
+  return items.map((i) => {
+    const quizObj = i.quiz || i;
+    const quizId = i.quiz_id ?? quizObj.id ?? null;
+    const attemptId = i.id ?? quizId;
+
+    const title = quizObj.quiz_title || quizObj.title || "Untitled Quiz";
+    const subjectName =
+      quizObj?.subject?.name || i?.quiz?.subject?.name || i?.subject_name || "General";
+    const teacherName =
+      quizObj?.teacher?.name || i?.quiz?.teacher?.name || i?.teacher_name || "Teacher";
+
+    const rawStatus = (i.status || quizObj.status || (i.finished ? "completed" : "")).toLowerCase();
+    const status = rawStatus || "completed";
+
+    // score is already a percentage in your backend (0-100)
+    const scorePercent =
+      typeof i.score === "number" ? Math.round(i.score) : (typeof i.percent === "number" ? Math.round(i.percent) : null);
+
+    const durationMinutes = quizObj.duration_minutes || quizObj.time_limit || null;
+    const questionsCount = quizObj.question_count || i.total_questions || null;
+
+    const finishedAtTs = i.finished_at ? new Date(i.finished_at).getTime() : null;
+    const finishedAt = i.finished_at
+      ? new Date(i.finished_at).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
+
+    return {
+      id: attemptId,
+      quizId,
+      title,
+      subjectName,
+      teacherName,
+      status,
+      scorePercent,
+      durationMinutes,
+      questionsCount,
+      finishedAt,
+      finishedAtTs,
+    };
+  });
+}
+
 /* ===================== Main Component ===================== */
 export default function Home() {
   const { user } = useContext(AuthContext);
@@ -34,39 +90,30 @@ export default function Home() {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    if (!user?.id || !user?.token) return;
+    if (!user?.id) return;
     let mounted = true;
 
     const fetchQuizzes = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        setLoading(true);
-        setError(null);
+        // 1) Attempts for this student
+        const res = await api.get(`students/${user.id}/quizzes`);
+        const base = Array.isArray(res.data) ? res.data : res.data?.data ?? res.data ?? [];
 
-        // Base attempts
-        const res = await axios.get(`${apiurl}students/${user.id}/quizzes`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        const base = res?.data?.data ?? res?.data ?? [];
-
-        // Hydrate quiz subject + teacher if missing by fetching /quizzes/:id
+        // 2) Hydrate quiz subject/teacher if missing (fallback)
         const ids = Array.from(
-          new Set(
-            base
-              .map((x) => x.quiz_id || x?.quiz?.id)
-              .filter(Boolean)
-          )
+          new Set(base.map((x) => x.quiz_id || x?.quiz?.id).filter(Boolean))
         );
 
         const detailsMap = {};
         await Promise.all(
           ids.map(async (qid) => {
             try {
-              const qRes = await axios.get(`${apiurl}quizzes/${qid}`, {
-                headers: { Authorization: `Bearer ${user.token}` },
-              });
+              const qRes = await api.get(`quizzes/${qid}`);
               detailsMap[qid] = qRes?.data?.data ?? qRes?.data ?? null;
             } catch {
-              // ignore individual quiz fetch errors
+              // ignore individual fetch errors
             }
           })
         );
@@ -83,8 +130,7 @@ export default function Home() {
         const normalized = normalizeQuizzes(enriched);
         if (mounted) setQuizzes(normalized);
       } catch (e) {
-        console.error("Fetch quizzes failed:", e?.response?.data || e.message);
-        if (mounted) setError("Could not load your completed quizzes. Please retry.");
+        if (mounted) setError(extractApiError(e) || "Could not load your completed quizzes. Please retry.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -94,7 +140,7 @@ export default function Home() {
     return () => {
       mounted = false;
     };
-  }, [user?.id, user?.token]);
+  }, [user?.id]);
 
   // Completed only
   const completed = useMemo(
@@ -173,31 +219,7 @@ export default function Home() {
 
       <main className="flex-1 overflow-auto">
         {/* Top Bar */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10 p-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="relative w-full max-w-md">
-              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                type="text"
-                placeholder="Search completed quizzes by title, subject or teacher..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-              />
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full">
-                <FaGraduationCap className="text-indigo-600" />
-                <span className="text-sm font-medium">{user?.name || "Student"}</span>
-              </div>
-              <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
-                <FaBell className="text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-            </div>
-          </div>
-        </header>
+        
 
         <div className="p-6 md:p-8">
           {/* Greeting */}
@@ -494,53 +516,4 @@ function QuizResultCard({ quiz, onReview }) {
       </div>
     </div>
   );
-}
-
-/* ============= Normalization Utils ============= */
-function normalizeQuizzes(items) {
-  return items.map((i) => {
-    const quizObj = i.quiz || i;
-    const quizId = i.quiz_id ?? quizObj.id ?? null;
-    const attemptId = i.id ?? quizId;
-
-    const title = quizObj.quiz_title || quizObj.title || "Untitled Quiz";
-    const subjectName =
-      quizObj?.subject?.name || i?.quiz?.subject?.name || i?.subject_name || "General";
-    const teacherName =
-      quizObj?.teacher?.name || i?.quiz?.teacher?.name || i?.teacher_name || "Teacher";
-
-    const rawStatus = (i.status || quizObj.status || (i.finished ? "completed" : "")).toLowerCase();
-    const status = rawStatus || "completed";
-
-    const score = typeof i.score === "number" ? i.score : null;
-    const totalScore = i.total_score ?? 100;
-    const scorePercent = typeof score === "number" ? Math.round((score / totalScore) * 100) : null;
-
-    const durationMinutes = quizObj.duration_minutes || quizObj.time_limit || null;
-    const questionsCount = quizObj.question_count || i.total_questions || null;
-
-    const finishedAtTs = i.finished_at ? new Date(i.finished_at).getTime() : null;
-    const finishedAt = i.finished_at
-      ? new Date(i.finished_at).toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : null;
-
-    return {
-      id: attemptId,
-      quizId,
-      title,
-      subjectName,
-      teacherName,
-      status,
-      scorePercent,
-      durationMinutes,
-      questionsCount,
-      finishedAt,
-      finishedAtTs,
-    };
-  });
 }
