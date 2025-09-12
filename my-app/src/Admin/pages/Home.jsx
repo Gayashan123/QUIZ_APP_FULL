@@ -1,6 +1,21 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ Import useNavigate
-import { FiHome, FiBook, FiUsers, FiBriefcase, FiLayers } from "react-icons/fi";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  FiHome,
+  FiBook,
+  FiUsers,
+  FiBriefcase,
+  FiLayers,
+  FiX,
+  FiRefreshCw,
+} from "react-icons/fi";
 import {
   FaUsers,
   FaChalkboardTeacher,
@@ -9,62 +24,21 @@ import {
   FaBook,
   FaCalendarAlt,
   FaHistory,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 
-import Sidebar from "../components/Sidebar";
-import AdminStatCard from "../components/StatCard";
-import AdminActionButton from "../components/ActionButton";
-import { apiurl, token as tokenFromLS } from "../../Admin/common/Http";
-import AddStudentForm from "../components/AddStudent";
-import AddTeacherForm from "../components/AddTeacher";
-import AddSubjectForm from "../components/AddSubject";
-import AddFacultyForm from "../components/AddFaculty";
-/* ---------- Helpers ---------- */
-const normalizeBase = (base) =>
-  typeof base === "string" ? base.replace(/\/+$/, "") + "/" : "/";
+// Import API configuration
+import api from "../common/api";
 
-const API_ROOT = normalizeBase(apiurl);
+// Lazy load components
+const Sidebar = lazy(() => import("../components/Sidebar"));
+const AdminStatCard = lazy(() => import("../components/StatCard"));
+const AddStudentForm = lazy(() => import("../components/AddStudent"));
+const AddTeacherForm = lazy(() => import("../components/AddTeacher"));
+const AddSubjectForm = lazy(() => import("../components/AddSubject"));
+const AddFacultyForm = lazy(() => import("../components/AddFaculty"));
 
-const resolveToken = () => {
-  try {
-    const t = typeof tokenFromLS === "function" ? tokenFromLS() : tokenFromLS;
-    if (typeof t === "string") return t;
-    if (t && typeof t === "object" && typeof t.token === "string")
-      return t.token;
-  } catch {}
-  try {
-    const ls = localStorage.getItem("authToken");
-    return typeof ls === "string" ? ls : "";
-  } catch {
-    return "";
-  }
-};
-
-const makeHeaders = () => {
-  const h = new Headers();
-  h.set("Accept", "application/json");
-  h.set("Content-Type", "application/json");
-  const tk = resolveToken();
-  if (tk) h.set("Authorization", `Bearer ${tk}`);
-  return h;
-};
-
-const fetchJSON = async (path, opts = {}) => {
-  const url = path.startsWith("http")
-    ? path
-    : API_ROOT + path.replace(/^\/+/, "");
-  const res = await fetch(url, { ...opts, headers: makeHeaders() });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const err = await res.json();
-      msg = err?.message || err?.error || JSON.stringify(err);
-    } catch {}
-    throw new Error(msg);
-  }
-  return res.status === 204 ? null : res.json();
-};
-
+// Helper functions
 const parseDate = (v) => (v ? new Date(v) : null);
 
 const quizStatus = (q, now = new Date()) => {
@@ -87,13 +61,9 @@ const listLength = (data) => {
 const safeRecent = (arr, n = 6) => {
   const sorted = [...arr].sort((a, b) => {
     const A =
-      parseDate(
-        a.created_at || a.createdAt || a.start_time || a.start_at
-      )?.getTime() || 0;
+      parseDate(a.created_at || a.createdAt || a.start_time || a.start_at)?.getTime() || 0;
     const B =
-      parseDate(
-        b.created_at || b.createdAt || b.start_time || b.start_at
-      )?.getTime() || 0;
+      parseDate(b.created_at || b.createdAt || b.start_time || b.start_at)?.getTime() || 0;
     return B - A;
   });
   return sorted.slice(0, n);
@@ -115,12 +85,32 @@ const fmtDate = (d) => {
   }
 };
 
-/* ---------- Component ---------- */
-export default function AdminDashboard() {
-  const navigate = useNavigate(); // ✅ Initialize useNavigate
+// Loading component
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center py-8">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+  </div>
+);
 
+// Error boundary component
+const ErrorBoundary = ({ children, message }) => {
+  if (message) {
+    return (
+      <div className="rounded-lg bg-red-50 p-4 mb-4">
+        <div className="flex items-center">
+          <FaExclamationTriangle className="text-red-400 mr-2" />
+          <span className="text-red-700 text-sm">{message}</span>
+        </div>
+      </div>
+    );
+  }
+  return children;
+};
+
+export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
+  const [error, setError] = useState("");
   const [counts, setCounts] = useState({
     faculties: 0,
     students: 0,
@@ -131,122 +121,207 @@ export default function AdminDashboard() {
     upcoming: 0,
   });
   const [recentQuizzes, setRecentQuizzes] = useState([]);
+  const [activeForm, setActiveForm] = useState(null);
+  const [formError, setFormError] = useState("");
 
-  const load = async () => {
-    setLoading(true);
-    setErr("");
-    try {
-      const token = resolveToken();
-      if (!token) throw new Error("Not authenticated");
+ // Inside loadData function
+const loadData = useCallback(async () => {
+  setLoading(true);
+  setError("");
 
-      const [
-        studentsCountRes,
-        facultiesRes,
-        teachersRes,
-        subjectsRes,
-        quizzesRes,
-      ] = await Promise.all([
-        fetchJSON("students/count").catch(() => fetchJSON("students")),
-        fetchJSON("faculties"),
-        fetchJSON("teachers"),
-        fetchJSON("subjects"),
-        fetchJSON("quizzes"),
-      ]);
+  try {
+    const [
+      studentsResponse,
+      facultiesResponse,
+      teachersResponse,
+      subjectsResponse,
+      quizzesResponse,
+    ] = await Promise.all([
+      api.get("students"),   // Get all students
+      api.get("faculties"),  // Get all faculties
+      api.get("teachers"),   // Get all teachers
+      api.get("subjects"),   // Get all subjects
+      api.get("quizzes"),    // Get all quizzes
+    ]);
 
-      const students =
-        typeof studentsCountRes?.count === "number"
-          ? studentsCountRes.count
-          : typeof studentsCountRes?.total === "number"
-          ? studentsCountRes.total
-          : listLength(studentsCountRes);
+    const students = listLength(studentsResponse.data);
+    const faculties = listLength(facultiesResponse.data);
+    const teachers = listLength(teachersResponse.data);
+    const subjects = listLength(subjectsResponse.data);
 
-      const faculties = listLength(facultiesRes);
-      const teachers = listLength(teachersRes);
-      const subjects = listLength(subjectsRes);
+    const quizzesList = Array.isArray(quizzesResponse.data)
+      ? quizzesResponse.data
+      : quizzesResponse.data?.data || [];
 
-      const quizzesList = Array.isArray(quizzesRes)
-        ? quizzesRes
-        : quizzesRes?.data || [];
-      const quizzes = quizzesList.length;
+    const quizzes = quizzesList.length;
+    const now = new Date();
 
-      const now = new Date();
-      const ongoing = quizzesList.filter(
-        (q) => quizStatus(q, now) === "ongoing"
-      ).length;
-      const upcoming = quizzesList.filter(
-        (q) => quizStatus(q, now) === "upcoming"
-      ).length;
+    const ongoing = quizzesList.filter((q) => quizStatus(q, now) === "ongoing").length;
+    const upcoming = quizzesList.filter((q) => quizStatus(q, now) === "upcoming").length;
 
-      setCounts({
-        faculties,
-        students,
-        teachers,
-        subjects,
-        quizzes,
-        ongoing,
-        upcoming,
-      });
-      setRecentQuizzes(safeRecent(quizzesList, 6));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to load overview");
-    } finally {
-      setLoading(false);
-    }
-  };
+    setCounts({
+      faculties,
+      students,
+      teachers,
+      subjects,
+      quizzes,
+      ongoing,
+      upcoming,
+    });
+
+    setRecentQuizzes(safeRecent(quizzesList, 6));
+  } catch (err) {
+ 
+    setError(err.response?.data?.message || err.message || "Failed to load data");
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
 
   useEffect(() => {
-    load();
+    loadData();
+  }, [loadData]);
+
+  const handleFormOpen = useCallback((formName) => {
+    setActiveForm(formName);
+    setFormError("");
   }, []);
 
-  const skeleton = (
-    <div className="space-y-3">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-16 bg-slate-200/70 rounded-2xl animate-pulse"
-        />
-      ))}
-    </div>
+  const handleFormClose = useCallback(() => {
+    setActiveForm(null);
+    setFormError("");
+    // Refresh data when a form is closed (assuming something might have been added)
+    loadData();
+  }, [loadData]);
+
+  const handleQuizClick = useCallback((quizId) => {
+    navigate(`/admin/quiz/${quizId}`);
+  }, [navigate]);
+
+  // Memoize the stats cards to prevent unnecessary re-renders
+  const statsCards = useMemo(() => [
+    {
+      title: "Students",
+      value: loading ? "…" : counts.students,
+      icon: <FaUsers />,
+      color: "bg-blue-600"
+    },
+    {
+      title: "Teachers",
+      value: loading ? "…" : counts.teachers,
+      icon: <FaChalkboardTeacher />,
+      color: "bg-purple-600"
+    },
+    {
+      title: "Faculties",
+      value: loading ? "…" : counts.faculties,
+      icon: <FaUniversity />,
+      color: "bg-emerald-600"
+    },
+    {
+      title: "Subjects",
+      value: loading ? "…" : counts.subjects,
+      icon: <FaBook />,
+      color: "bg-amber-600"
+    },
+    {
+      title: "Quizzes",
+      value: loading ? "…" : counts.quizzes,
+      icon: <FaClipboardList />,
+      color: "bg-sky-600"
+    },
+    {
+      title: "Ongoing",
+      value: loading ? "…" : counts.ongoing,
+      icon: <FaHistory />,
+      color: "bg-green-600"
+    },
+    {
+      title: "Upcoming",
+      value: loading ? "…" : counts.upcoming,
+      icon: <FaCalendarAlt />,
+      color: "bg-indigo-600"
+    }
+  ], [loading, counts]);
+
+  const quickActions = useMemo(() => [
+    {
+      label: "Create Student",
+      icon: <FiBook />,
+      color: "bg-blue-600 hover:bg-blue-700",
+      action: () => handleFormOpen("student")
+    },
+    {
+      label: "Create Teacher",
+      icon: <FiUsers />,
+      color: "bg-purple-600 hover:bg-purple-700",
+      action: () => handleFormOpen("teacher")
+    },
+    {
+      label: "Create Faculty",
+      icon: <FiBriefcase />,
+      color: "bg-emerald-600 hover:bg-emerald-700",
+      action: () => handleFormOpen("faculty")
+    },
+    {
+      label: "Create Subject",
+      icon: <FiLayers />,
+      color: "bg-amber-600 hover:bg-amber-700",
+      action: () => handleFormOpen("subject")
+    }
+  ], [handleFormOpen]);
+
+  const skeleton = useMemo(
+    () => (
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-16 bg-slate-200/70 rounded-2xl animate-pulse"
+          />
+        ))}
+      </div>
+    ),
+    []
   );
+
+  const renderForm = () => {
+    if (!activeForm) return null;
+    
+    const formProps = {
+      onCancel: handleFormClose,
+      onSuccess: handleFormClose,
+      error: formError,
+      setError: setFormError
+    };
+    
+    return (
+      <ErrorBoundary message={formError}>
+        <Suspense fallback={<LoadingSpinner />}>
+          {activeForm === "student" && <AddStudentForm {...formProps} />}
+          {activeForm === "teacher" && <AddTeacherForm {...formProps} />}
+          {activeForm === "faculty" && <AddFacultyForm {...formProps} />}
+          {activeForm === "subject" && <AddSubjectForm {...formProps} />}
+        </Suspense>
+      </ErrorBoundary>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 flex">
-      <Sidebar
-        adminName="Admin"
-        links={[
-          {
-            key: "dashboard",
-            label: "Dashboard",
-            to: "/admin",
-            icon: <FiHome />,
-            end: true,
-          },
-          {
-            key: "students",
-            label: "Student Management",
-            to: "/createst",
-            icon: <FiBook />,
-          },
-          {
-            key: "teachers",
-            label: "Teacher Management",
-            to: "/createte",
-            icon: <FiUsers />,
-          },
-          {
-            key: "faculty",
-            label: "Faculty Management",
-            to: "/createfu",
-            icon: <FiBriefcase />,
-          },
-          {
-            key: "subjects",
-            label: "Subject Management",
-            to: "/createsu",
-            icon: <FiLayers />,
-          },
-        ]}
-      />
+      <Suspense fallback={<div className="p-6">Loading sidebar...</div>}>
+        <Sidebar
+          adminName="Admin"
+          links={[
+            { key: "dashboard", label: "Dashboard", to: "/admin", icon: <FiHome />, end: true },
+            { key: "students", label: "Student Management", to: "/createst", icon: <FiBook /> },
+            { key: "teachers", label: "Teacher Management", to: "/createte", icon: <FiUsers /> },
+            { key: "faculty", label: "Faculty Management", to: "/createfu", icon: <FiBriefcase /> },
+            { key: "subjects", label: "Subject Management", to: "/createsu", icon: <FiLayers /> },
+          ]}
+        />
+      </Suspense>
 
       <main className="flex-1 overflow-auto">
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -263,67 +338,42 @@ export default function AdminDashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={load}
+                  onClick={loadData}
                   disabled={loading}
-                  className="px-3 py-2 rounded-xl border border-gray-200 bg-white hover:shadow-sm transition disabled:opacity-60"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:shadow-sm transition disabled:opacity-60"
                   title="Refresh"
                 >
+                  <FiRefreshCw className={loading ? "animate-spin" : ""} />
                   {loading ? "Refreshing…" : "Refresh"}
                 </button>
               </div>
             </div>
-            {err && (
-              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm">
-                {err}
+            {error && (
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm flex items-center gap-2">
+                <FaExclamationTriangle />
+                {error}
               </div>
             )}
           </section>
 
           {/* Stats */}
-          <section className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-10">
-            <AdminStatCard
-              title="Students"
-              value={loading ? "…" : counts.students}
-              icon={<FaUsers />}
-              color="bg-blue-600"
-            />
-            <AdminStatCard
-              title="Teachers"
-              value={loading ? "…" : counts.teachers}
-              icon={<FaChalkboardTeacher />}
-              color="bg-purple-600"
-            />
-            <AdminStatCard
-              title="Faculties"
-              value={loading ? "…" : counts.faculties}
-              icon={<FaUniversity />}
-              color="bg-emerald-600"
-            />
-            <AdminStatCard
-              title="Subjects"
-              value={loading ? "…" : counts.subjects}
-              icon={<FaBook />}
-              color="bg-amber-600"
-            />
-            <AdminStatCard
-              title="Quizzes"
-              value={loading ? "…" : counts.quizzes}
-              icon={<FaClipboardList />}
-              color="bg-sky-600"
-            />
-            <AdminStatCard
-              title="Ongoing"
-              value={loading ? "…" : counts.ongoing}
-              icon={<FaHistory />}
-              color="bg-green-600"
-            />
-            <AdminStatCard
-              title="Upcoming"
-              value={loading ? "…" : counts.upcoming}
-              icon={<FaCalendarAlt />}
-              color="bg-indigo-600"
-            />
-          </section>
+          <Suspense fallback={<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-10">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 animate-pulse rounded-xl"></div>
+            ))}
+          </div>}>
+            <section className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-10">
+              {statsCards.map((card, index) => (
+                <AdminStatCard
+                  key={index}
+                  title={card.title}
+                  value={card.value}
+                  icon={card.icon}
+                  color={card.color}
+                />
+              ))}
+            </section>
+          </Suspense>
 
           {/* Quizzes Overview + Quick Actions */}
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
@@ -341,7 +391,10 @@ export default function AdminDashboard() {
               {loading ? (
                 skeleton
               ) : !recentQuizzes.length ? (
-                <p className="text-sm text-gray-600">No quizzes found.</p>
+                <div className="text-center py-8 text-gray-500">
+                  <FaClipboardList className="mx-auto text-3xl mb-2 text-gray-300" />
+                  <p>No quizzes found.</p>
+                </div>
               ) : (
                 <div className="divide-y divide-gray-100">
                   {recentQuizzes.map((q) => {
@@ -352,19 +405,25 @@ export default function AdminDashboard() {
                     return (
                       <div
                         key={q.id}
-                        className="py-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-gray-50 rounded-lg"
-                        onClick={() => navigate(`/admin/quiz/${q.id}`)} // ✅ Navigate to quiz details
+                        className="py-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors"
+                        onClick={() => handleQuizClick(q.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") handleQuizClick(q.id);
+                        }}
                       >
-                        <div>
-                          <div className="font-medium">{title}</div>
-                          <div className="text-xs text-gray-500">
-                            Subject: {subj} • Start: {fmtDate(q.start_time)} •
-                            End: {fmtDate(q.end_time)}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{title}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            <span className="block">Subject: {subj}</span>
+                            <span className="block">Start: {fmtDate(q.start_time)}</span>
+                            <span className="block">End: {fmtDate(q.end_time)}</span>
                           </div>
                         </div>
                         <span
                           className={[
-                            "text-xs px-2 py-1 rounded-full border",
+                            "text-xs px-2 py-1 rounded-full border whitespace-nowrap",
                             st === "ongoing"
                               ? "bg-green-50 text-green-700 border-green-200"
                               : st === "upcoming"
@@ -387,38 +446,45 @@ export default function AdminDashboard() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
               <div className="space-y-3">
-                <button
-                  onClick={() => navigate("/createst")}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
-                >
-                  <FiBook /> Create Student
-                </button>
-
-                <button
-                  onClick={() => navigate("/createte")}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition"
-                >
-                  <FiUsers /> Create Teacher
-                </button>
-
-                <button
-                  onClick={() => navigate("/createfu")}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
-                >
-                  <FiBriefcase /> Create Faculty
-                </button>
-
-                <button
-                  onClick={() => navigate("/createsu")}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition"
-                >
-                  <FiLayers /> Create Subject
-                </button>
+                {quickActions.map((action, index) => (
+                  <button
+                    key={index}
+                    onClick={action.action}
+                    className={`w-full flex items-center gap-2 px-4 py-2 ${action.color} text-white rounded-xl transition`}
+                  >
+                    {action.icon} {action.label}
+                  </button>
+                ))}
               </div>
             </div>
           </section>
         </div>
       </main>
+      
+      {/* Modal for forms */}
+      {activeForm && (
+        <div className="fixed inset-0 bg-transparent  flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-semibold">
+                {activeForm === "student" && "Add Student"}
+                {activeForm === "teacher" && "Add Teacher"}
+                {activeForm === "faculty" && "Add Faculty"}
+                {activeForm === "subject" && "Add Subject"}
+              </h3>
+              <button
+                onClick={handleFormClose}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <div className="p-4">
+              {renderForm()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

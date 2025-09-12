@@ -38,7 +38,7 @@ export default function AddFacultyForm({ onAddFaculty, onCancel, initialData, is
   };
 
   return (
-    <form className="bg-white shadow-xl rounded-2xl p-6 max-w-md mx-auto space-y-5" onSubmit={handleSubmit}>
+    <form className="bg-white border-2 border-black shadow-xl rounded-2xl p-6 max-w-md mx-auto space-y-5" onSubmit={handleSubmit}>
       <h2 className="text-2xl font-semibold text-gray-900">{isEditMode ? "Update Faculty" : "Add New Faculty"}</h2>
 
       {error && <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>}

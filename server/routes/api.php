@@ -151,7 +151,7 @@ Route::get('students/{studentId}/quizzes', [StudentQuizController::class, 'getSt
 
 
         Route::get('students/{studentId}/quizzes/{quizId}/review', [StudentQuizController::class, 'reviewByQuiz']);
-        Route::get('quizzes/{quizId}/students', [StudentQuizController::class, 'getQuizStudents']);
+Route::get('students/{studentId}/available-quizzes', [StudentQuizController::class, 'availableQuizzes']);
 
 });
 

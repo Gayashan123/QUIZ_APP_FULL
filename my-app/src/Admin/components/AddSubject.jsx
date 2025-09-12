@@ -54,7 +54,7 @@ export default function AddSubjectForm({
 
   return (
     <form
-      className="bg-white shadow-sm rounded-2xl p-6 max-w-md mx-auto space-y-6"
+      className="bg-white border-2 border-black shadow-sm rounded-2xl p-6 max-w-md mx-auto space-y-6"
       onSubmit={handleSubmit}
     >
       <h2 className="text-2xl font-semibold text-gray-900">{isEditMode ? "Update Subject" : "Add New Subject"}</h2>

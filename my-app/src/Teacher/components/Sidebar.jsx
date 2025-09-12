@@ -2,13 +2,11 @@ import React, { useContext, useMemo, useState } from "react";
 import {
   FiBarChart2,
   FiBook,
-  FiPieChart,
   FiUsers,
   FiSettings,
   FiMenu,
   FiX,
   FiLogOut,
-  FiSliders,
 } from "react-icons/fi";
 import { FaChartBar } from "react-icons/fa";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -55,55 +53,13 @@ export default function Sidebar({ teacherName = "Teacher" }) {
   };
 
   const nav = [
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      to: "/home",
-      icon: <FiBarChart2 />,
-      tone: "indigo",
-    },
+    { key: "dashboard", label: "Dashboard", to: "/home", icon: <FiBarChart2 />, tone: "indigo" },
 
-    {
-      key: "students",
-      label: "Quizzes Control",
-      to: "/manage",
-      icon: <FiSliders />,
-      tone: "emerald",
-    },
-    {
-      key: "details",
-      label: "Student Analyze",
-      to: "/view",
-      icon: <FiUsers />,
-      tone: "violet",
-    },
-
-{
-      key: "details",
-      label: "Quiz Analyze",
-      to: "/quizanalyze",
-      icon: <FiPieChart />,
-      tone: "violet",
-    },
-  
-
-
-    {
-      key: "settings",
-      label: "Settings",
-      to: "/settings",
-      icon: <FiSettings />,
-      tone: "slate",
-    },
-
+    { key: "students", label: "Quizzes", to: "/manage", icon: <FiUsers />, tone: "emerald" },
+    { key: "analytics", label: "Analytics", to: "/view", icon: <FaChartBar />, tone: "violet" },
+    { key: "settings", label: "Settings", to: "/settings", icon: <FiSettings />, tone: "slate" },
     // Logout is a button (no NavLink)
-    {
-      key: "logout",
-      label: "Logout",
-      icon: <FiLogOut />,
-      tone: "rose",
-      onClick: handleLogout,
-    },
+    { key: "logout", label: "Logout", icon: <FiLogOut />, tone: "rose", onClick: handleLogout },
   ];
 
   const Brand = (
@@ -126,11 +82,7 @@ export default function Sidebar({ teacherName = "Teacher" }) {
   );
 
   const UserCard = (
-    <div
-      className={`mt-auto pt-6 border-t border-slate-200 ${
-        collapsed ? "px-0" : ""
-      }`}
-    >
+    <div className={`mt-auto pt-6 border-t border-slate-200 ${collapsed ? "px-0" : ""}`}>
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
           {initials}
@@ -217,9 +169,7 @@ export default function Sidebar({ teacherName = "Teacher" }) {
       />
       <div
         className={`fixed left-0 top-0 bottom-0 z-50 w-4/5 max-w-sm bg-white shadow-2xl p-5 flex flex-col
-        transform transition-transform duration-300 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        transform transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         role="dialog"
         aria-modal="true"
       >

@@ -13,43 +13,7 @@ class StudentQuizController extends Controller
     {
         $studentQuizzes = StudentQuiz::with(['student', 'quiz.subject'])->get();
         return response()->json($studentQuizzes);
-
-
     }
-
-
-//get the student data by the each quiz
-
- public function getQuizStudents(int $quizId)
-    {
-        $attempts = StudentQuiz::with(['student:id,name,email'])
-            ->where('quiz_id', $quizId)
-            ->orderByDesc('finished_at')
-            ->get(['id', 'student_id', 'quiz_id', 'score', 'finished', 'finished_at', 'started_at']);
-
-        $data = $attempts->map(function ($a) {
-            return [
-                'id'          => $a->id,
-                'student_id'  => $a->student_id,
-                'name'        => optional($a->student)->name,
-                'email'       => optional($a->student)->email,
-                'score'       => (int) ($a->score ?? 0),
-                'started_at'  => optional($a->started_at)->toIso8601String(),
-                'finished_at' => optional($a->finished_at)->toIso8601String(),
-            ];
-        })->values();
-
-        return response()->json(['status' => true, 'data' => $data]);
-    }
-
-
-
-
-
-
-
-
-
 
     public function store(Request $request)
     {
@@ -204,88 +168,78 @@ class StudentQuizController extends Controller
 // app/Http/Controllers/StudentQuizController.php
 
 public function reviewByQuiz(Request $request, int $studentId, int $quizId)
-    {
-        $attempt = StudentQuiz::with(['student', 'quiz.subject', 'quiz.teacher'])
-            ->where('student_id', $studentId)
-            ->where('quiz_id', $quizId)
-            ->first();
+{
+    // Load attempt with quiz, subject, and teacher
+    $attempt = StudentQuiz::with(['quiz.subject', 'quiz.teacher'])
+        ->where('student_id', $studentId)
+        ->where('quiz_id', $quizId)
+        ->first();
 
-        if (!$attempt) {
-            return response()->json(['message' => 'Attempt not found'], 404);
-        }
-
-        $results = Student_result::where('student_quiz_id', $attempt->id)
-            ->get(['question_id', 'solution_id', 'is_correct'])
-            ->keyBy('question_id');
-
-        $questions = \App\Models\Question::where('quiz_id', $quizId)
-            ->with(['options' => function ($q) {
-                $q->select('id', 'question_id', 'option_text', 'is_correct')->orderBy('id');
-            }])
-            ->get(['id', 'quiz_id', 'question_text', 'points']);
-
-        $total = $questions->count();
-        $correct = 0;
-
-        $qPayload = $questions->map(function ($q) use ($results, &$correct) {
-            $res = $results->get($q->id);
-            $selId = $res ? $res->solution_id : null;
-            $ok    = (bool) ($res ? $res->is_correct : false);
-            if ($ok) $correct++;
-
-            $correctOption = $q->options->firstWhere('is_correct', 1);
-            $selectedOption = $selId ? $q->options->firstWhere('id', $selId) : null;
-
-            return [
-                'id' => $q->id,
-                'question_text' => $q->question_text,
-                'points' => (int) ($q->points ?? 0),
-
-                'is_correct' => $ok,
-                'selected_option_id' => $selId,
-                'selected_option_text' => $selectedOption?->option_text,
-
-                'correct_option_id' => $correctOption?->id,
-                'correct_option_text' => $correctOption?->option_text,
-
-                'options' => $q->options->map(fn($o) => [
-                    'id' => $o->id,
-                    'option_text' => $o->option_text,
-                    'is_correct' => (bool) $o->is_correct,
-                ])->toArray(),
-            ];
-        })->values();
-
-        $percent = $total > 0 ? (int) round(($correct / $total) * 100) : 0;
-
-        return response()->json([
-            'status' => true,
-            'student' => [
-                'id'    => $attempt->student?->id,
-                'name'  => $attempt->student?->name,
-                'email' => $attempt->student?->email,
-            ],
-            'attempt' => [
-                'id'          => $attempt->id,
-                'score'       => (int) ($attempt->score ?? $percent),
-                'finished'    => (bool) $attempt->finished,
-                'started_at'  => optional($attempt->started_at)->toIso8601String(),
-                'finished_at' => optional($attempt->finished_at)->toIso8601String(),
-                'quiz' => [
-                    'id' => $attempt->quiz->id,
-                    'title' => $attempt->quiz->quiz_title ?? $attempt->quiz->title ?? 'Quiz',
-                    'subject' => optional($attempt->quiz->subject)->name,
-                    'teacher' => optional($attempt->quiz->teacher)->name ?? 'Unknown Teacher',
-                    'time_limit' => (int) ($attempt->quiz->time_limit ?? 0),
-                ],
-            ],
-            'summary' => [
-                'correct' => $correct,
-                'total' => $total,
-                'percent' => $percent,
-            ],
-            'questions' => $qPayload,
-        ]);
+    if (!$attempt) {
+        return response()->json(['message' => 'Attempt not found'], 404);
     }
+
+    // Fetch per-question results
+    $results = Student_result::where('student_quiz_id', $attempt->id)
+        ->get(['question_id', 'solution_id', 'is_correct'])
+        ->keyBy('question_id');
+
+    // Fetch questions + options (expose is_correct in review only)
+    $questions = \App\Models\Question::where('quiz_id', $quizId)
+        ->with(['options' => function ($q) {
+            $q->select('id', 'question_id', 'option_text', 'is_correct')->orderBy('id');
+        }])
+        ->get(['id', 'quiz_id', 'question_text', 'points']);
+
+    $total = $questions->count();
+    $correct = 0;
+
+    $qPayload = $questions->map(function ($q) use ($results, &$correct) {
+        $res = $results->get($q->id);
+        $sel = $res ? $res->solution_id : null;
+        $ok  = (bool) ($res ? $res->is_correct : false);
+        if ($ok) $correct++;
+        return [
+            'id' => $q->id,
+            'question_text' => $q->question_text,
+            'points' => (int) ($q->points ?? 0),
+            'selected_option_id' => $sel,
+            'is_correct' => $ok,
+            'options' => $q->options->map(fn($o) => [
+                'id' => $o->id,
+                'option_text' => $o->option_text,
+                'is_correct' => (bool) $o->is_correct,
+            ])->toArray(),
+        ];
+    })->values();
+
+    $percent = $total > 0 ? (int) round(($correct / $total) * 100) : 0;
+
+    return response()->json([
+        'status' => true,
+        'attempt' => [
+            'id' => $attempt->id,
+            'score' => (int) ($attempt->score ?? $percent),
+            'finished' => (bool) $attempt->finished,
+            'finished_at' => optional($attempt->finished_at)->toIso8601String(),
+            'quiz' => [
+                'id' => $attempt->quiz->id,
+                'title' => $attempt->quiz->quiz_title ?? $attempt->quiz->title ?? 'Quiz',
+                'subject' => optional($attempt->quiz->subject)->name,
+                'teacher' => optional($attempt->quiz->teacher)->name ?? 'Unknown Teacher', // <-- teacher added
+                'time_limit' => (int) ($attempt->quiz->time_limit ?? 0),
+            ],
+        ],
+        'summary' => [
+            'correct' => $correct,
+            'total' => $total,
+            'percent' => $percent,
+        ],
+        'questions' => $qPayload,
+    ]);
+}
+
+
+
 
 }

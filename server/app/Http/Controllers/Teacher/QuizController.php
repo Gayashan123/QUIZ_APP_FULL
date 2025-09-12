@@ -10,17 +10,14 @@ use Carbon\Carbon;
 
 class QuizController extends Controller
 {
-  public function index(Request $request)
+    public function index()
     {
-        $teacherId = optional($request->user())->id;
+        $quizzes = Quiz::with(['subject', 'teacher'])->get();
 
-        // Return only quizzes created by this teacher
-        $quizzes = Quiz::with(['subject'])
-            ->when($teacherId, fn ($q) => $q->where('teacher_id', $teacherId))
-            ->orderByDesc('created_at')
-            ->get();
-
-        return response()->json($quizzes);
+        return response()->json([
+            'status' => true,
+            'data'   => $quizzes,
+        ]);
     }
 
     public function store(Request $request)

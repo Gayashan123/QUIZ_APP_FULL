@@ -52,7 +52,7 @@ export default function AddStudentForm({ onAddStudent, onCancel, initialData, is
 
   return (
     <form
-      className="bg-white shadow-2xl rounded-3xl p-8 max-w-md mx-auto space-y-6 border border-gray-100"
+      className="bg-white border-2 shadow-2xl rounded-3xl p-8 max-w-md mx-auto space-y-6  border-black"
       onSubmit={handleSubmit}
     >
       <h2 className="text-3xl font-semibold text-gray-900 text-center">

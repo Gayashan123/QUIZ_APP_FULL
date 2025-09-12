@@ -43,7 +43,7 @@ export default function AddTeacherForm({ onAddTeacher, onCancel, initialData, is
   };
 
   return (
-    <form className="bg-white shadow-xl rounded-2xl p-6 max-w-md mx-auto space-y-5" onSubmit={handleSubmit}>
+    <form className="bg-transparent border-2 border-black shadow-xl rounded-2xl p-6 max-w-md mx-auto space-y-5" onSubmit={handleSubmit}>
       <h2 className="text-2xl font-semibold">
         {isEditMode ? "Update Teacher" : "Add New Teacher"}
       </h2>

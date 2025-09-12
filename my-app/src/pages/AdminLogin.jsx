@@ -1,15 +1,16 @@
 import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  LockClosedIcon,
-  EnvelopeIcon,
-  UserIcon,
-  EyeIcon,
-  EyeSlashIcon,
-  QuestionMarkCircleIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+  FaUser,
+  FaEnvelope,
+  FaLock,
+  FaEye,
+  FaEyeSlash,
+  FaQuestionCircle,
+  FaTimes,
+} from "react-icons/fa";
 import { AuthContext } from "../context/Auth";
+import api from "../Admin/common/api";
 
 const AdminLogin = ({ closeLogin }) => {
   const navigate = useNavigate();
@@ -31,29 +32,19 @@ const AdminLogin = ({ closeLogin }) => {
     setIsLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/authenticate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: credentials.username,
-          password: credentials.password,
-        }),
+      const { data } = await api.post("authenticate", {
+        email: credentials.username,
+        password: credentials.password,
       });
 
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.message || "Login failed");
-      }
-
-      // Set user type to "admin"
-      const userData = { 
-        email: credentials.username, 
-        token: result.token, 
+      // Store user info
+      const userData = {
+        email: credentials.username,
+        token: data.token,
         type: "admin",
-        id: result.admin?.id || null
+        id: data.admin?.id || null,
       };
-      
+
       login(userData);
 
       if (rememberMe) {
@@ -62,7 +53,7 @@ const AdminLogin = ({ closeLogin }) => {
 
       navigate("/admin");
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.message || "Login failed");
     } finally {
       setIsLoading(false);
     }
@@ -70,39 +61,42 @@ const AdminLogin = ({ closeLogin }) => {
 
   return (
     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 sm:p-10 border border-gray-200">
+      {/* Close Button */}
       <button
         onClick={closeLogin}
         className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 transition"
       >
-        <XMarkIcon className="h-6 w-6 text-gray-500 hover:text-gray-700" />
+        <FaTimes className="h-6 w-6 text-gray-500 hover:text-gray-700" />
       </button>
 
+      {/* Header */}
       <div className="flex items-center justify-center gap-3 mb-4">
-        <UserIcon className="h-7 w-7 text-blue-500" />
+        <FaUser className="h-7 w-7 text-blue-500" />
         <h2 className="text-3xl font-semibold text-gray-900">Admin Login</h2>
       </div>
       <p className="text-center text-gray-500 mb-6 text-sm">
         Enter your credentials to access your dashboard
       </p>
 
+      {/* Error */}
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
           {error}
         </div>
       )}
 
+      {/* Login Form */}
       <form className="space-y-5" onSubmit={handleSubmit}>
+        {/* Email */}
         <div>
           <label
             htmlFor="username"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Email 
+            Email
           </label>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <EnvelopeIcon className="h-5 w-5 text-gray-400" />
-            </div>
+            <FaEnvelope className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type="text"
               name="username"
@@ -117,6 +111,7 @@ const AdminLogin = ({ closeLogin }) => {
           </div>
         </div>
 
+        {/* Password */}
         <div>
           <label
             htmlFor="password"
@@ -125,9 +120,7 @@ const AdminLogin = ({ closeLogin }) => {
             Password
           </label>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <LockClosedIcon className="h-5 w-5 text-gray-400" />
-            </div>
+            <FaLock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type={showPassword ? "text" : "password"}
               name="password"
@@ -142,18 +135,19 @@ const AdminLogin = ({ closeLogin }) => {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center text-gray-500 hover:text-gray-700"
               disabled={isLoading}
             >
               {showPassword ? (
-                <EyeSlashIcon className="h-5 w-5" />
+                <FaEyeSlash className="h-5 w-5" />
               ) : (
-                <EyeIcon className="h-5 w-5" />
+                <FaEye className="h-5 w-5" />
               )}
             </button>
           </div>
         </div>
 
+        {/* Remember Me & Help */}
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 text-gray-700">
             <input
@@ -166,11 +160,12 @@ const AdminLogin = ({ closeLogin }) => {
             Remember me
           </label>
           <div className="flex items-center gap-1 text-blue-500 cursor-pointer hover:text-blue-700">
-            <QuestionMarkCircleIcon className="h-5 w-5" />
+            <FaQuestionCircle className="h-5 w-5" />
             <span>Help: +94 752 069 762</span>
           </div>
         </div>
 
+        {/* Submit */}
         <button
           type="submit"
           disabled={isLoading}
