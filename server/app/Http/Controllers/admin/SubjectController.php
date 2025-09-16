@@ -9,34 +9,30 @@ use Illuminate\Support\Facades\Validator;
 
 class SubjectController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        $subjects = Subject::orderBy('created_at', 'DESC')->get();
+        $subjects = Subject::orderByDesc('created_at')->get();
 
         return response()->json([
             'status' => true,
-            'data' => $subjects
+            'data'   => $subjects
         ], 200);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
+        // Policy enforced via route middleware 'can:create,App\Models\Subject'
+
         $validator = Validator::make($request->all(), [
-            'code' => 'required|unique:subjects,code',
-            'name' => 'required'
+            'code' => 'required|unique:subjects,code|string|max:32',
+            'name' => 'required|string|max:255',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
                 'errors' => $validator->errors()
-            ], 400);
+            ], 422);
         }
 
         $subject = Subject::create([
@@ -45,56 +41,35 @@ class SubjectController extends Controller
         ]);
 
         return response()->json([
-            'status' => true,
-            'message' => "Subject Created Successfully",
-            'data' => $subject
+            'status'  => true,
+            'message' => "Subject created successfully",
+            'data'    => $subject
         ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show($id)
+    public function show(Subject $subject)
     {
-        $subject = Subject::find($id);
-
-        if (!$subject) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Subject not found'
-            ], 404);
-        }
-
+        // Policy enforced via 'can:view,subject'
         return response()->json([
             'status' => true,
-            'data' => $subject
+            'data'   => $subject
         ], 200);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id)
+    public function update(Request $request, Subject $subject)
     {
-        $subject = Subject::find($id);
-
-        if (!$subject) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Subject not found'
-            ], 404);
-        }
+        // Policy enforced via 'can:update,subject'
 
         $validator = Validator::make($request->all(), [
-            'code' => 'required|unique:subjects,code,' . $id, // ignore current subject
-            'name' => 'required'
+            'code' => 'required|string|max:32|unique:subjects,code,' . $subject->id,
+            'name' => 'required|string|max:255'
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
                 'errors' => $validator->errors()
-            ], 400);
+            ], 422);
         }
 
         $subject->update([
@@ -103,30 +78,19 @@ class SubjectController extends Controller
         ]);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Subject updated successfully',
-            'data' => $subject
+            'data'    => $subject
         ], 200);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id)
+    public function destroy(Subject $subject)
     {
-        $subject = Subject::find($id);
-
-        if (!$subject) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Subject not found'
-            ], 404);
-        }
-
+        // Policy enforced via 'can:delete,subject'
         $subject->delete();
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Subject deleted successfully'
         ], 200);
     }

@@ -13,7 +13,7 @@ import Header from "./components/Header";
 import LoginPage from "./pages/LoginPage";
 import Navigation from "./components/Navigation";
 import QuizPage from "./pages/LeaderBoared";
-import UserDashboard from "./pages/QuizDashboared";
+
 
 import Teacher from "./Teacher/pages/Home";
 import Admin from "./Admin/pages/Home";
@@ -59,7 +59,7 @@ function App() {
         />
         <Route path="/loginpage" element={<LoginPage />} />
         <Route path="/quizpage" element={<QuizPage />} />
-        <Route path="/user" element={<UserDashboard />} />
+      
 
         {/* Protected Routes */}
         {/* Teacher Routes */}
@@ -180,7 +180,7 @@ function App() {
           }
         />
         <Route
-          path="/studentquiz1"
+          path="/studentquiz"
           element={
             <RequireAuth>
               <StudentQuiz />

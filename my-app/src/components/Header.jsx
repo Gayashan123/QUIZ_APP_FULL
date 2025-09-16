@@ -58,13 +58,7 @@ export default function Header() {
         {/* Buttons */}
         <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
           {/* Start Quiz Button */}
-          <button
-           onClick={() => navigate("/user")}
-            className="group flex items-center gap-3 px-6 py-3 bg-white/10 backdrop-blur-lg border border-white/20 text-white font-medium rounded-full shadow-md hover:bg-white/20 hover:scale-105 hover:shadow-xl transition-all"
-          >
-            <FaCompass className="text-xl" />
-            <span>Leader Boared</span>
-          </button>
+        
 
           {/* Contact Us Button */}
           <button

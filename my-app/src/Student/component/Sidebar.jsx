@@ -101,7 +101,7 @@ export default function StudentSidebar({ studentName = "Student User" }) {
 
   const nav = [
     { key: "dashboard", label: "Dashboard", to: "/student", icon: <FiBarChart2 /> },
-    { key: "quizzes", label: "Quizzes", to: "/studentquiz1", icon: <FiUsers /> },
+    { key: "quizzes", label: "Quizzes", to: "/studentquiz", icon: <FiUsers /> },
     { key: "analytics", label: "Analytics", to: "/analytics", icon: <FaChartBar /> },
     { key: "settings", label: "Settings", to: "/settings1", icon: <FiSettings /> },
   ];
@@ -208,24 +208,23 @@ export default function StudentSidebar({ studentName = "Student User" }) {
             <FiX size={22} />
           </button>
         </div>
+<nav className="flex flex-col gap-1">
+  {nav.map(({ key, ...props }) => (
+    <SideLink key={key} {...props} collapsed={false} />
+  ))}
 
-        <nav className="flex flex-col gap-1">
-          {nav.map((item) => (
-            <SideLink key={item.key} {...item} collapsed={false} />
-          ))}
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isLoading}
-            className="mt-2 group flex items-center gap-3 px-3 py-2 rounded-xl transition text-rose-700 hover:bg-rose-50 border border-transparent"
-          >
-            <span className="inline-flex items-center justify-center h-9 w-9 rounded-lg border bg-white text-rose-700 border-slate-200">
-              {isLoading ? <Spinner size="4" /> : <FiLogOut />}
-            </span>
-            <span className="font-medium">{isLoading ? "Logging out..." : "Logout"}</span>
-          </button>
-        </nav>
+  <button
+    type="button"
+    onClick={handleLogout}
+    disabled={isLoading}
+    className="mt-2 group flex items-center gap-3 px-3 py-2 rounded-xl transition text-rose-700 hover:bg-rose-50 border border-transparent"
+  >
+    <span className="inline-flex items-center justify-center h-9 w-9 rounded-lg border bg-white text-rose-700 border-slate-200">
+      {isLoading ? <Spinner size="4" /> : <FiLogOut />}
+    </span>
+    <span className="font-medium">{isLoading ? "Logging out..." : "Logout"}</span>
+  </button>
+</nav>
 
         {UserCard}
       </div>

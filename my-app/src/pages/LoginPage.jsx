@@ -1,14 +1,14 @@
 // Home.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Quiz from "../assets/Quiz1.jpg";
 import { FaSignInAlt, FaUserShield, FaChalkboardTeacher, FaHome } from "react-icons/fa";
 
-// Import login forms
-import AdminLogin from "./AdminLogin";
-import TeacherLogin from "./TeacherLogin";
-import StudentLogin from "./StudentLogin";
+// Lazy load login forms
+const AdminLogin = lazy(() => import("./AdminLogin"));
+const TeacherLogin = lazy(() => import("./TeacherLogin"));
+const StudentLogin = lazy(() => import("./StudentLogin"));
 
 // Animation variants
 const buttonVariants = { hover: { scale: 1.05 }, tap: { scale: 0.95 } };
@@ -19,26 +19,33 @@ const modalVariants = {
   exit: { opacity: 0, y: 40, scale: 0.95, transition: { duration: 0.2 } },
 };
 
+// Simple fallback component for lazy-loaded modals
+const ModalFallback = () => (
+  <div className="bg-white p-6 rounded-xl shadow-lg">
+    <p className="text-gray-700">Loading...</p>
+  </div>
+);
+
 const Home = () => {
   const navigate = useNavigate();
 
-  // Individual modal states
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
 
   // Close modals on ESC
+  const handleEsc = useCallback((e) => {
+    if (e.key === "Escape") {
+      setShowAdminModal(false);
+      setShowTeacherModal(false);
+      setShowStudentModal(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === "Escape") {
-        setShowAdminModal(false);
-        setShowTeacherModal(false);
-        setShowStudentModal(false);
-      }
-    };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, []);
+  }, [handleEsc]);
 
   return (
     <>
@@ -54,11 +61,14 @@ const Home = () => {
       </motion.button>
 
       {/* Main Home UI */}
-      <div
+      <main
         className="min-h-screen bg-cover bg-center flex items-center justify-center px-4"
         style={{ backgroundImage: `url(${Quiz})` }}
       >
-        <div className="bg-white/60 backdrop-blur-lg p-8 rounded-2xl shadow-2xl text-center max-w-md w-full">
+        <section
+          className="bg-white/60 backdrop-blur-lg p-8 rounded-2xl shadow-2xl text-center max-w-md w-full"
+          aria-label="Welcome Section"
+        >
           <h1 className="text-4xl font-semibold text-gray-900 mb-3 tracking-tight">
             Welcome to <span className="text-blue-600">JuizQuiz</span>
           </h1>
@@ -67,51 +77,43 @@ const Home = () => {
           </p>
 
           <div className="flex flex-col gap-4">
-            
-             <motion.button
+            <motion.button
               onClick={() => setShowAdminModal(true)}
               className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white py-2.5 rounded-2xl shadow-sm"
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
+              aria-label="Admin Login"
             >
               <FaUserShield /> Admin Login
             </motion.button>
 
-             <motion.button
+            <motion.button
               onClick={() => setShowTeacherModal(true)}
               className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-2xl shadow-sm"
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
+              aria-label="Teacher Login"
             >
               <FaChalkboardTeacher /> Teacher Login
             </motion.button>
 
-
-
-            
-            
-            
-            
-            
             <motion.button
               onClick={() => setShowStudentModal(true)}
               className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-2xl shadow-sm"
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
+              aria-label="Student Login"
             >
               <FaSignInAlt /> Student Login
             </motion.button>
-
-           
-           
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
 
-      {/* Admin Modal */}
+      {/* Modals */}
       <AnimatePresence>
         {showAdminModal && (
           <>
@@ -131,14 +133,13 @@ const Home = () => {
               exit="exit"
               onClick={(e) => e.stopPropagation()}
             >
-              <AdminLogin closeLogin={() => setShowAdminModal(false)} />
+              <Suspense fallback={<ModalFallback />}>
+                <AdminLogin closeLogin={() => setShowAdminModal(false)} />
+              </Suspense>
             </motion.div>
           </>
         )}
-      </AnimatePresence>
 
-      {/* Teacher Modal */}
-      <AnimatePresence>
         {showTeacherModal && (
           <>
             <motion.div
@@ -157,14 +158,13 @@ const Home = () => {
               exit="exit"
               onClick={(e) => e.stopPropagation()}
             >
-              <TeacherLogin closeLogin={() => setShowTeacherModal(false)} />
+              <Suspense fallback={<ModalFallback />}>
+                <TeacherLogin closeLogin={() => setShowTeacherModal(false)} />
+              </Suspense>
             </motion.div>
           </>
         )}
-      </AnimatePresence>
 
-      {/* Student Modal */}
-      <AnimatePresence>
         {showStudentModal && (
           <>
             <motion.div
@@ -183,7 +183,9 @@ const Home = () => {
               exit="exit"
               onClick={(e) => e.stopPropagation()}
             >
-              <StudentLogin closeLogin={() => setShowStudentModal(false)} />
+              <Suspense fallback={<ModalFallback />}>
+                <StudentLogin closeLogin={() => setShowStudentModal(false)} />
+              </Suspense>
             </motion.div>
           </>
         )}

@@ -28,7 +28,7 @@ function Footer() {
                 { label: "Home", to: "header" },
                 { label: "About", to: "about" },
                 { label: "Contact", to: "contact" },
-                { label: "Leaderboard", to: "leaderboard" },
+              
               ].map(({ label, to }) => (
                 <li key={to}>
                   <Link

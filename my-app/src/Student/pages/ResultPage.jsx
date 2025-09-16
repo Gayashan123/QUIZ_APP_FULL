@@ -248,7 +248,7 @@ export default function StudentQuizReview() {
           {/* Header with Back Button */}
           <div className="flex items-center mb-6">
             <button
-              onClick={() => navigate("/studentquiz1")}
+              onClick={() => navigate("/studentquiz")}
               className="flex items-center text-indigo-600 hover:text-indigo-700 transition p-2 rounded-lg hover:bg-indigo-50 mr-4"
               aria-label="Back to quizzes"
             >

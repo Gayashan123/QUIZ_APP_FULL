@@ -10,24 +10,18 @@ use Illuminate\Support\Facades\Validator;
 
 class StudentController extends Controller
 {
-    /**
-     * GET: Display all students
-     */
+    // GET: list (any authenticated)
     public function index()
     {
-        $students = Student::orderBy('created_at', 'DESC')->get();
-
-
+        $students = Student::orderByDesc('created_at')->get();
 
         return response()->json([
             'status' => true,
-            'data' => $students
+            'data'   => $students
         ], 200);
     }
 
-    /**
-     * POST: Store a newly created student (Admin sets data)
-     */
+    // POST: create (admin only)
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(),[
@@ -41,65 +35,44 @@ class StudentController extends Controller
             return response()->json([
                 'status' => false,
                 'errors' => $validator->errors()
-            ], 400);
+            ], 422);
         }
 
         $student = Student::create([
             'name'     => $request->name,
             'email'    => $request->email,
             'phone'    => $request->phone,
-            'password' => Hash::make($request->password), // hash password
+            'password' => Hash::make($request->password),
         ]);
 
         return response()->json([
+            'status'  => true,
             'message' => 'Student created successfully',
-            'student' => $student
+            'data'    => $student
         ], 201);
     }
 
-    /**
-     * GET: Show a specific student
-     */
-    public function show($id)
+    // GET: show (admin or self)
+    public function show(Student $student)
     {
-        $student = Student::find($id);
-
-        if (!$student) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Student not found'
-            ], 404);
-        }
-
         return response()->json([
             'status' => true,
-            'data' => $student
+            'data'   => $student
         ], 200);
     }
 
-
-public function count()
-{
-    return response()->json([
-        'status' => true,
-        'count' => Student::count(),
-    ]);
-}
-
-    /**
-     * PUT/PATCH: Update a student
-     */
-    public function update(Request $request, $id)
+    // GET: count (any authenticated)
+    public function count()
     {
-        $student = Student::find($id);
+        return response()->json([
+            'status' => true,
+            'count'  => Student::count(),
+        ], 200);
+    }
 
-        if (!$student) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Student not found'
-            ], 404);
-        }
-
+    // PUT/PATCH: update (admin or self)
+    public function update(Request $request, Student $student)
+    {
         $validator = Validator::make($request->all(), [
             'name'     => 'sometimes|string|max:255',
             'email'    => 'sometimes|email|unique:students,email,' . $student->id,
@@ -111,54 +84,32 @@ public function count()
             return response()->json([
                 'status' => false,
                 'errors' => $validator->errors()
-            ], 400);
+            ], 422);
         }
 
-        $validatedData = $validator->validated();
+        $data = $validator->validated();
 
-        // If password is being updated, hash it
-        if (isset($validatedData['password'])) {
-            $validatedData['password'] = Hash::make($validatedData['password']);
+        if (isset($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
         }
 
-        $student->update($validatedData);
+        $student->update($data);
 
         return response()->json([
+            'status'  => true,
             'message' => 'Student updated successfully',
-            'student' => $student
+            'data'    => $student
         ], 200);
     }
 
-    /**
-     * DELETE: Remove a student
-     */
-    public function destroy($id)
+    // DELETE: destroy (admin or self)
+    public function destroy(Student $student)
     {
-        $student = Student::find($id);
-
-        if (!$student) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Student not found'
-            ], 404);
-        }
-
         $student->delete();
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Student deleted successfully'
         ], 200);
     }
-
-
-
-
-
-
-
-
-
-
-
 }
