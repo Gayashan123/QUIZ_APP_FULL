@@ -239,7 +239,37 @@ public function reviewByQuiz(Request $request, int $studentId, int $quizId)
     ]);
 }
 
+// Add this method to your StudentQuizController
+public function getQuizStudents($quizId)
+{
+    // Load students who have attempted this quiz
+    $attempts = StudentQuiz::with(['student'])
+        ->where('quiz_id', $quizId)
+        ->get();
 
+    // Transform the data to match what your frontend expects
+    $students = $attempts->map(function ($attempt) {
+        return [
+            'id' => $attempt->id, // attempt ID
+            'attemptId' => $attempt->id,
+            'studentId' => $attempt->student_id,
+            'student_id' => $attempt->student_id,
+            'name' => $attempt->student->name ?? 'Unknown Student',
+            'student_name' => $attempt->student->name ?? 'Unknown Student',
+            'email' => $attempt->student->email ?? '',
+            'score' => $attempt->score,
+            'finished_at' => $attempt->finished_at,
+            'finished' => $attempt->finished,
+            'student' => [
+                'id' => $attempt->student_id,
+                'name' => $attempt->student->name ?? 'Unknown Student',
+                'email' => $attempt->student->email ?? '',
+            ]
+        ];
+    });
+
+    return response()->json($students);
+}
 
 
 }

@@ -6,13 +6,9 @@ import {
   Navigate,
 } from "react-router-dom";
 
-import About from "./components/About";
-import Contact from "./components/Contact";
-import Footer from "./components/Footer";
-import Header from "./components/Header";
+
 import LoginPage from "./pages/LoginPage";
-import Navigation from "./components/Navigation";
-import QuizPage from "./pages/LeaderBoared";
+
 
 
 import Teacher from "./Teacher/pages/Home";
@@ -45,20 +41,10 @@ function App() {
     <Router>
       <Routes>
         {/* Public Routes */}
-        <Route
-          path="/"
-          element={
-            <>
-              <Navigation />
-              <Header />
-              <About />
-              <Contact />
-              <Footer />
-            </>
-          }
-        />
+      
+      <Route path="/" element={<Navigate to="/loginpage" replace />} />
         <Route path="/loginpage" element={<LoginPage />} />
-        <Route path="/quizpage" element={<QuizPage />} />
+       
       
 
         {/* Protected Routes */}

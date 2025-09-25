@@ -49,16 +49,7 @@ const Home = () => {
 
   return (
     <>
-      {/* Home Button */}
-      <motion.button
-        onClick={() => navigate("/")}
-        aria-label="Go to Home"
-        className="fixed top-5 left-5 z-50 bg-white/90 p-3 rounded-full shadow-md"
-        whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,1)" }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <FaHome className="text-teal-600 w-6 h-6" />
-      </motion.button>
+      
 
       {/* Main Home UI */}
       <main

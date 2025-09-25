@@ -11,6 +11,7 @@ import {
   FiDownload,
   FiX,
   FiCheck,
+  FiFileText,
 } from "react-icons/fi";
 
 /* ---------------- Helpers ---------------- */
@@ -53,6 +54,62 @@ const normalizeAttempt = (r) => ({
   score: toNumber(r.score),
   finishedAt: r.finished_at || r.completed_at || null,
 });
+
+/* ---------------- CSV Export Helpers ---------------- */
+const convertToCSV = (data) => {
+  if (!data.length) return '';
+  
+  const headers = Object.keys(data[0]);
+  const csvHeaders = headers.map(header => `"${header.replace(/"/g, '""')}"`).join(',');
+  
+  const csvRows = data.map(row => {
+    return headers.map(header => {
+      const value = row[header] === null || row[header] === undefined ? '' : row[header];
+      return `"${String(value).replace(/"/g, '""')}"`;
+    }).join(',');
+  });
+  
+  return [csvHeaders, ...csvRows].join('\n');
+};
+
+const downloadCSV = (csvContent, filename) => {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const prepareQuizDataForExport = (quiz, students) => {
+  return students.map(student => ({
+    'Quiz': quiz.title,
+    'Quiz_Subject': quiz.subject,
+    
+    'St_Name': student.name,
+   
+    'Score (%)': student.score || 'Not completed',
+    
+    
+  }));
+};
+
+const prepareAllDataForExport = (quizzes, studentsByQuiz) => {
+  const allData = [];
+  
+  quizzes.forEach(quiz => {
+    const students = studentsByQuiz[quiz.id] || [];
+    const quizData = prepareQuizDataForExport(quiz, students);
+    allData.push(...quizData);
+  });
+  
+  return allData;
+};
 
 /* ---------------- UI atoms ---------------- */
 const Card = ({ children, className = "" }) => (
@@ -204,6 +261,72 @@ function ReviewModal({ open, onClose, loading, error, data, studentName }) {
   );
 }
 
+/* ---------------- Export Buttons ---------------- */
+const ExportButtons = ({ quizzes, studentsByQuiz, expandedQuiz }) => {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportAll = () => {
+    setExporting(true);
+    try {
+      const allData = prepareAllDataForExport(quizzes, studentsByQuiz);
+      if (allData.length === 0) {
+        alert('No data available to export');
+        return;
+      }
+      const csv = convertToCSV(allData);
+      const timestamp = new Date().toISOString().split('T')[0];
+      downloadCSV(csv, `quiz-students-data-${timestamp}.csv`);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Error exporting data');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportCurrent = () => {
+    if (!expandedQuiz) {
+      alert('Please select a quiz first by expanding it');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const students = studentsByQuiz[expandedQuiz.id] || [];
+      if (students.length === 0) {
+        alert('No student data available for this quiz');
+        return;
+      }
+      const quizData = prepareQuizDataForExport(expandedQuiz, students);
+      const csv = convertToCSV(quizData);
+      const filename = `quiz-${expandedQuiz.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.csv`;
+      downloadCSV(csv, filename);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Error exporting quiz data');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const hasData = Object.values(studentsByQuiz).some(students => students && students.length > 0);
+
+  return (
+    <div className="flex flex-wrap gap-3">
+    
+      
+      <button
+        onClick={handleExportCurrent}
+        disabled={exporting || !expandedQuiz}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+      >
+        <FiDownload />
+        {exporting ? 'Exporting...' : 'Export Current Quiz'}
+      </button>
+    </div>
+  );
+};
+
 /* ---------------- Main Page ---------------- */
 export default function QuizStudentsPage() {
   const [quizzes, setQuizzes] = useState([]);
@@ -305,6 +428,11 @@ export default function QuizStudentsPage() {
     [studentsByQuiz]
   );
 
+  const expandedQuiz = useMemo(() => 
+    quizzes.find(q => q.id === expanded) || null,
+    [quizzes, expanded]
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50/40 via-white to-purple-50/40 text-slate-900 flex">
       {/* Sidebar */}
@@ -338,14 +466,30 @@ export default function QuizStudentsPage() {
 
         {/* Quizzes List */}
         <div className="space-y-4">
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <div className="text-sm text-slate-600">Total Quizzes</div>
-              <div className="text-2xl font-bold">{quizzes.length}</div>
+          {/* Stats and Export */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Card>
+                <div className="text-sm text-slate-600">Total Quizzes</div>
+                <div className="text-2xl font-bold">{quizzes.length}</div>
+              </Card>
+              <Card>
+                <div className="text-sm text-slate-600">Total Participants</div>
+                <div className="text-2xl font-bold">{totalParticipants}</div>
+              </Card>
+              <Card>
+                <div className="text-sm text-slate-600">Active Quiz</div>
+                <div className="text-2xl font-bold">{expandedQuiz ? '1' : '0'}</div>
+              </Card>
+            </div>
+            
+            <Card className="flex items-center justify-center">
+              <ExportButtons 
+                quizzes={quizzes} 
+                studentsByQuiz={studentsByQuiz} 
+                expandedQuiz={expandedQuiz}
+              />
             </Card>
-           
-          
           </div>
 
           <Card>
